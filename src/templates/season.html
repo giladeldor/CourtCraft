@@ -41,11 +41,13 @@
       {% endfor %}
     </ul>
     {% if image %}
-    <p>Image should load below:</p>
-    <img src="{{ image }}" alt="NBA Season Image" style="width: 100%; max-width: 500px; border-radius: 10px; display: block; border: 2px solid green;">
+      <p>Image:</p>
+      <img src="{{ image }}" alt="NBA Season Image" style="width: 100%; max-width: 500px; border-radius: 10px; display: block; border: 2px solid green;">
     {% else %}
-    <p>No image available for this season.</p>
+      <p>No image available for this season.</p>
     {% endif %}
+    <br><br>
+      <a href="{{ url_for('season_data_page', season=season|replace('/', '-')) }}" class="btn btn-secondary">View Basic Stats leaders</a>
     <br><br>
     <a href="/" class="nav-button">Back to Home</a>
   </div>

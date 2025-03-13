@@ -49,6 +49,10 @@
     <br><br>
       <a href="{{ url_for('season_data_page', season=season|replace('/', '-')) }}" class="btn btn-secondary">View Basic Stats leaders</a>
     <br><br>
+    {% if season == "24/25" %}
+      <a href="{{ url_for('team_assemble_page', season=season|replace('/', '-')) }}" class="btn btn-info" style="margin-left:10px;">Team Assemble</a>
+    {% endif %}
+
     <a href="/" class="nav-button">Back to Home</a>
   </div>
 </body>

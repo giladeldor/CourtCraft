@@ -1,8 +1,9 @@
 import os
 import pandas as pd
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, jsonify, session
 
 app = Flask(__name__)
+app.secret_key = "your-secret-key"  # Replace with a secure secret key
 
 # Mapping from season URL (e.g., "24-25") to the corresponding Excel file.
 data_files = {
@@ -14,7 +15,6 @@ data_files = {
     # Future seasons: add more mappings here.
 }
 
-# Generic function to process season data.
 def process_season_data(season):
     if season in data_files:
         file_path = os.path.join(os.path.dirname(__file__), data_files[season])
@@ -42,7 +42,7 @@ def process_season_data(season):
     else:
         return None
 
-# List of NBA seasons (for the carousel)
+# List of NBA seasons for the carousel
 nba_seasons = [f"{y % 100:02d}/{(y + 1) % 100:02d}" for y in range(2024, 2010, -1)]
 
 # Season display data for season pages
@@ -70,10 +70,11 @@ def home():
 @app.route("/season/<season>")
 def season_page(season):
     formatted_season = season.replace("-", "/")
+    season_url = season  # URL-friendly version
     if season in season_data:
-        return render_template("season.html", season=formatted_season, **season_data[season])
+        return render_template("season.html", season=formatted_season, season_url=season_url, **season_data[season])
     else:
-        return render_template("season.html", season=formatted_season,
+        return render_template("season.html", season=formatted_season, season_url=season_url,
                                title=f"{formatted_season} NBA Season",
                                headline="No Data Available",
                                description="Details for this season are not available yet.",
@@ -85,23 +86,35 @@ def season_data_page(season):
     results = process_season_data(season)
     return render_template("data_calculation.html", season=formatted_season, results=results)
 
-# New route for Team Assemble (currently implemented for available seasons; starting with 24/25)
 @app.route("/season/<season>/team", methods=["GET", "POST"])
 def team_assemble_page(season):
     formatted_season = season.replace("-", "/")
     season_url = season  # URL-friendly version
+    # Retrieve previously registered players from session.
+    registered = session.get("registered_players", {})
+    registered_players = registered.get(season, [])
+    
     results = None
     totals = None
-    players_input = ""
+    analysis = None
+
     if request.method == "POST":
-        players_input = request.form.get("players", "")
-        players_list = [p.strip() for p in players_input.replace("\r", "").split("\n") if p.strip()]
+        players = []
+        for i in range(1, 14):
+            name = request.form.get(f"player{i}", "").strip()
+            if name:
+                players.append(name)
+        # Update session with these players.
+        registered[season] = players
+        session["registered_players"] = registered
+        registered_players = players
+        
         if season in data_files:
             file_path = os.path.join(os.path.dirname(__file__), data_files[season])
             df = pd.read_excel(file_path)
-            df_filtered = df[df['Name'].str.lower().isin([p.lower() for p in players_list])]
+            df_filtered = df[df['Name'].str.lower().isin([p.lower() for p in players])]
             results = df_filtered.to_dict(orient="records")
-            # Exclude unwanted columns, including "g"
+            # Exclude unwanted columns.
             columns_to_exclude = ["Round", "Rank", "Value", "Team", "Inj", "Pos", "m/g", "USG", "fga/g", "g"]
             for row in results:
                 for col in columns_to_exclude:
@@ -112,7 +125,7 @@ def team_assemble_page(season):
                 totals.pop(col, None)
             totals["Name"] = "Total"
             totals["Team"] = ""
-            # Round numeric values in results and totals to 2 decimals
+            # Round numeric values to 2 decimals.
             for row in results:
                 for key, value in row.items():
                     if isinstance(value, float):
@@ -120,8 +133,41 @@ def team_assemble_page(season):
             for key, value in totals.items():
                 if isinstance(value, float):
                     totals[key] = round(value, 2)
-    return render_template("team_assemble.html", season=formatted_season, season_url=season_url,
-                           players_input=players_input, results=results, totals=totals)
+                    
+            # Analysis: Count how many of the "Value" columns are above 0.
+            # Use the actual DataFrame column names (pV, rV, aV, sV, bV, toV, fg%V, ft%V, 3V).
+            value_columns = ["pV", "rV", "aV", "sV", "bV", "toV", "fg%V", "ft%V", "3V"]
+            above_zero_count = sum(1 for col in value_columns if totals.get(col, 0) > 0)
+            
+            if above_zero_count < 2:
+                analysis = "bad team"
+            elif above_zero_count < 3:
+                analysis = "ok team"
+            elif above_zero_count < 4:
+                analysis = "good team"
+            else:
+                analysis = "great team"
+
+    return render_template("team_assemble.html", 
+                           season=formatted_season, 
+                           season_url=season_url, 
+                           registered_players=registered_players, 
+                           results=results, 
+                           totals=totals,
+                           analysis=analysis)
+
+@app.route("/autocomplete/<season>")
+def autocomplete(season):
+    term = request.args.get('term', '').lower()
+    suggestions = []
+    if season in data_files:
+        file_path = os.path.join(os.path.dirname(__file__), data_files[season])
+        df = pd.read_excel(file_path)
+        names = df['Name'].dropna().unique()
+        for name in names:
+            if term in name.lower():
+                suggestions.append(name)
+    return jsonify(suggestions)
 
 if __name__ == "__main__":
     app.run(debug=True)

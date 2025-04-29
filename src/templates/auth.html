@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% block title %}Sign In / Register – NBA Fantasy{% endblock %}
+
+{% block content %}
+  {#— Immediately pop any danger flashes —#}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, msg in messages %}
+      {% if category == 'danger' %}
+        <script>alert("{{ msg }}");</script>
+      {% endif %}
+    {% endfor %}
+  {% endwith %}
+
+  <div class="row justify-content-center">
+    <div class="col-md-6">
+      <!-- Tabs -->
+      <ul class="nav nav-pills mb-4" id="auth-tabs" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button class="nav-link active" id="login-tab" data-bs-toggle="pill" data-bs-target="#login-pane" type="button" role="tab">
+            Login
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="register-tab" data-bs-toggle="pill" data-bs-target="#register-pane" type="button" role="tab">
+            Register
+          </button>
+        </li>
+      </ul>
+
+      <div class="tab-content" id="auth-content">
+        <!-- LOGIN FORM -->
+        <div class="tab-pane fade show active" id="login-pane" role="tabpanel">
+          <form action="{{ url_for('login') }}" method="post">
+            <div class="mb-3">
+              <label for="login-username" class="form-label">Username</label>
+              <input type="text" class="form-control" id="login-username" name="username" required>
+            </div>
+            <div class="mb-3">
+              <label for="login-password" class="form-label">Password</label>
+              <input type="password" class="form-control" id="login-password" name="password" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Login</button>
+          </form>
+        </div>
+
+        <!-- REGISTER FORM -->
+        <div class="tab-pane fade" id="register-pane" role="tabpanel">
+          <form action="{{ url_for('register') }}" method="post">
+            <div class="mb-3">
+              <label for="reg-username" class="form-label">Username</label>
+              <input type="text" class="form-control" id="reg-username" name="username" required>
+            </div>
+            <div class="mb-3">
+              <label for="reg-password" class="form-label">Password</label>
+              <input type="password" class="form-control" id="reg-password" name="password" required>
+            </div>
+            <div class="mb-3">
+              <label for="reg-confirm" class="form-label">Confirm Password</label>
+              <input type="password" class="form-control" id="reg-confirm" name="confirm_password" required>
+            </div>
+            <button type="submit" class="btn btn-secondary">Register</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

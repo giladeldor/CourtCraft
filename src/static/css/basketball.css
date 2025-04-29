@@ -1,0 +1,83 @@
+/* static/css/basketball.css */
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap');
+
+body {
+  margin: 0;
+  font-family: 'Montserrat', sans-serif;
+  background: #f8f4e6;
+  color: #333;
+}
+.navbar {
+  background: #dc7633;
+  padding: 1rem;
+}
+.navbar-brand {
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.5rem;
+}
+.navbar-nav .nav-link {
+  color: #fff;
+  margin-right: 1rem;
+}
+.navbar-nav .nav-link:hover {
+  color: #000;
+}
+.container {
+  background: #fff;
+  padding: 2rem;
+  margin-top: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+.btn-primary {
+  background: #1f618d;
+  border: none;
+  font-weight: 700;
+}
+.btn-primary:hover {
+  background: #154360;
+}
+.btn-secondary {
+  background: #fff;
+  color: #1f618d;
+  border: 2px solid #1f618d;
+}
+.btn-secondary:hover {
+  background: #1f618d;
+  color: #fff;
+}
+.table th {
+  background: #dc7633;
+  color: #fff;
+}
+.table-striped tbody tr:nth-of-type(odd) {
+  background-color: rgba(220,118,51,.1);
+}
+.carousel-item {
+  padding: 2rem 0;
+}
+.carousel-item .btn {
+  margin: 0 0.5rem;
+}
+.player-input {
+  border: 2px solid #1f618d;
+}
+.player-input:focus {
+  border-color: #dc7633;
+  box-shadow: none;
+}
+.punt-button {
+  background: #f39c12;
+  border: none;
+  color: #fff;
+}
+.punt-button.active {
+  background: #c0392b;
+}
+footer {
+  text-align: center;
+  padding: 1rem;
+  margin-top: 2rem;
+  color: #777;
+}

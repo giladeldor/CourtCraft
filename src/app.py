@@ -1,58 +1,91 @@
 import os
 import math
+import itertools
 import pandas as pd
 from flask import Flask, render_template, request, jsonify, session
+from datetime import datetime
 from markupsafe import Markup
 
 app = Flask(__name__)
 app.secret_key = "your-secret-key"  # Replace with a secure secret key
 
-# Mapping from season URL (e.g., "24-25") to the corresponding Excel file.
+# Inject current_year into all templates
+@app.context_processor
+def inject_current_year():
+    return {'current_year': datetime.now().year}
+
+# Directories for each data type.
+data_dirs = {
+    "nopunts": "Nopunts",
+    "tovpunt": "Tovpunts"
+}
+
+# Mapping from season to a dictionary mapping data type to the XLS filename.
 data_files = {
-    "24-25": "BBM_PlayerRankings2425_nopunt.xls",
-    "23-24": "BBM_PlayerRankings2324_nopunt.xls",
-    "22-23": "BBM_PlayerRankings2223_nopunt.xls",
-    "21-22": "BBM_PlayerRankings2122_nopunt.xls",
-    "20-21": "BBM_PlayerRankings2021_nopunt.xls"
-    # Future seasons: add more mappings here if desired.
+    "24-25": {
+        "nopunts": "BBM_PlayerRankings2425_nopunt.xls",
+        "tovpunt": "BBM_PlayerRankings2425_tovpunt.xls"
+    },
+    "23-24": {
+        "nopunts": "BBM_PlayerRankings2324_nopunt.xls",
+        "tovpunt": "BBM_PlayerRankings2324_tovpunt.xls"
+    },
+    "22-23": {
+        "nopunts": "BBM_PlayerRankings2223_nopunt.xls",
+        "tovpunt": "BBM_PlayerRankings2223_tovpunt.xls"
+    },
+    "21-22": {
+        "nopunts": "BBM_PlayerRankings2122_nopunt.xls",
+        "tovpunt": "BBM_PlayerRankings2122_tovpunt.xls"
+    },
+    "20-21": {
+        "nopunts": "BBM_PlayerRankings2021_nopunt.xls",
+        "tovpunt": "BBM_PlayerRankings2021_tovpunt.xls"
+    }
 }
 
 def get_color(value, min_val, max_val):
-    """
-    Returns an HSL color from red (worst) to green (best).
-    If there's no variation or the value is NaN, returns a neutral color.
-    """
     if pd.isna(value):
         return "white"
     if math.isclose(min_val, max_val):
-        # No variation => neutral yellowish color
         return "hsl(60, 100%, 85%)"
-    ratio = (value - min_val) / (max_val - min_val)  # 0..1
-    hue = 120 * ratio  # 0=red, 120=green
+    ratio = (value - min_val) / (max_val - min_val)
+    hue = 120 * ratio  # 0 = red, 120 = green.
     return f"hsl({hue}, 100%, 85%)"
 
-def process_season_data(season):
-    """
-    Returns a dictionary of top-10 stats for a given season (like "Points", "Rebounds", etc.).
-    Used by /season/<season>/data for the data_calculation.html page.
-    """
-    if season in data_files:
-        file_path = os.path.join(os.path.dirname(__file__), data_files[season])
+def process_season_data(season, data_type="nopunts"):
+    if season in data_files and data_type in data_files[season]:
+        file_path = os.path.join(
+            os.path.dirname(__file__),
+            data_dirs[data_type],
+            data_files[season][data_type]
+        )
         df = pd.read_excel(file_path)
+        if data_type == "tovpunt":
+            # Normalize column names: trim spaces and rename variants for extra columns.
+            df.columns = [col.strip() for col in df.columns]
+            new_columns = {}
+            for col in df.columns:
+                lower = col.lower()
+                if lower in ["leagv", "leaguev"]:
+                    new_columns[col] = "LeagV"
+                elif lower in ["puntv", "puntiv"]:
+                    new_columns[col] = "puntV"
+                else:
+                    new_columns[col] = col
+            df.rename(columns=new_columns, inplace=True)
 
+        # Build results dictionary
         results = {}
-        # Basic stats
-        results["Points"]          = df[['Name', 'Team', 'p/g']].sort_values(by='p/g', ascending=False).head(10).to_dict(orient='records')
-        results["Rebounds"]        = df[['Name', 'Team', 'r/g']].sort_values(by='r/g', ascending=False).head(10).to_dict(orient='records')
-        results["Assists"]         = df[['Name', 'Team', 'a/g']].sort_values(by='a/g', ascending=False).head(10).to_dict(orient='records')
-        results["Steals"]          = df[['Name', 'Team', 's/g']].sort_values(by='s/g', ascending=False).head(10).to_dict(orient='records')
-        results["Blocks"]          = df[['Name', 'Team', 'b/g']].sort_values(by='b/g', ascending=False).head(10).to_dict(orient='records')
-        results["Turnovers"]       = df[['Name', 'Team', 'to/g']].sort_values(by='to/g', ascending=True).head(10).to_dict(orient='records')
-        results["FG%"]             = df[['Name', 'Team', 'fg%']].sort_values(by='fg%', ascending=False).head(10).to_dict(orient='records')
-        results["FT%"]             = df[['Name', 'Team', 'ft%']].sort_values(by='ft%', ascending=False).head(10).to_dict(orient='records')
-        results["3PG"]             = df[['Name', 'Team', '3/g']].sort_values(by='3/g', ascending=False).head(10).to_dict(orient='records')
-
-        # Value columns
+        results["Points"]    = df[['Name', 'Team', 'p/g']].sort_values(by='p/g', ascending=False).head(10).to_dict(orient='records')
+        results["Rebounds"]  = df[['Name', 'Team', 'r/g']].sort_values(by='r/g', ascending=False).head(10).to_dict(orient='records')
+        results["Assists"]   = df[['Name', 'Team', 'a/g']].sort_values(by='a/g', ascending=False).head(10).to_dict(orient='records')
+        results["Steals"]    = df[['Name', 'Team', 's/g']].sort_values(by='s/g', ascending=False).head(10).to_dict(orient='records')
+        results["Blocks"]    = df[['Name', 'Team', 'b/g']].sort_values(by='b/g', ascending=False).head(10).to_dict(orient='records')
+        results["Turnovers"] = df[['Name', 'Team', 'to/g']].sort_values(by='to/g', ascending=True).head(10).to_dict(orient='records')
+        results["FG%"]       = df[['Name', 'Team', 'fg%']].sort_values(by='fg%', ascending=False).head(10).to_dict(orient='records')
+        results["FT%"]       = df[['Name', 'Team', 'ft%']].sort_values(by='ft%', ascending=False).head(10).to_dict(orient='records')
+        results["3PG"]       = df[['Name', 'Team', '3/g']].sort_values(by='3/g', ascending=False).head(10).to_dict(orient='records')
         results["Poits Value"]     = df[['Name', 'Team', 'pV']].sort_values(by='pV', ascending=False).head(10).to_dict(orient='records')
         results["Rebounds Value"]  = df[['Name', 'Team', 'rV']].sort_values(by='rV', ascending=False).head(10).to_dict(orient='records')
         results["Assists Value"]   = df[['Name', 'Team', 'aV']].sort_values(by='aV', ascending=False).head(10).to_dict(orient='records')
@@ -62,15 +95,11 @@ def process_season_data(season):
         results["FG% Value"]       = df[['Name', 'Team', 'fg%V']].sort_values(by='fg%V', ascending=False).head(10).to_dict(orient='records')
         results["FT% Value"]       = df[['Name', 'Team', 'ft%V']].sort_values(by='ft%V', ascending=False).head(10).to_dict(orient='records')
         results["3PG Value"]       = df[['Name', 'Team', '3V']].sort_values(by='3V', ascending=False).head(10).to_dict(orient='records')
-
         return results
-    else:
-        return None
+    return None
 
-# List of NBA seasons for the carousel (home page).
 nba_seasons = [f"{y % 100:02d}/{(y + 1) % 100:02d}" for y in range(2024, 2010, -1)]
 
-# Season display data for season pages.
 season_data = {
     "24-25": {"title": "2024/25 NBA Season"},
     "23-24": {"title": "2023/24 NBA Season"},
@@ -88,156 +117,134 @@ season_data = {
     "11-12": {"title": "2011/12 NBA Season"}
 }
 
-app = Flask(__name__)
-app.secret_key = "your-secret-key"
-
 @app.route("/")
 def home():
-    """
-    Home page with a carousel of all seasons (2024/25 down to 2011/12).
-    """
     return render_template("home.html", seasons=nba_seasons)
 
 @app.route("/season/<season>")
 def season_page(season):
-    """
-    Displays a page for the chosen season with “View Basic Stats” and “Team Assemble” buttons.
-    """
     formatted_season = season.replace("-", "/")
     season_url = season
     if season in season_data:
         return render_template("season.html", season=formatted_season, season_url=season_url, **season_data[season])
     else:
-        return render_template("season.html", season=formatted_season, season_url=season_url,
-                               title=f"{formatted_season} NBA Season",
-                               headline="No Data Available",
-                               description="Details for this season are not available yet.",
-                               top_teams=[], image=None)
+        return render_template(
+            "season.html",
+            season=formatted_season,
+            season_url=season_url,
+            title=f"{formatted_season} NBA Season",
+            headline="No Data Available",
+            description="No data for this season.",
+            top_teams=[],
+            image=None
+        )
 
 @app.route("/season/<season>/data")
 def season_data_page(season):
-    """
-    Shows top-10 stats (Points, Rebounds, etc.) for the chosen season.
-    """
-    formatted_season = season.replace("-", "/")
-    results = process_season_data(season)
-    return render_template("data_calculation.html", season=formatted_season, results=results)
+    results = process_season_data(season, data_type="nopunts")
+    return render_template("data_calculation.html", season=season.replace("-", "/"), results=results)
 
 @app.route("/season/<season>/team", methods=["GET", "POST"])
 def team_assemble_page(season):
-    """
-    Team Assemble route:
-    - Up to 13 players can be typed in.
-    - If "g" < 40 => big red plus sign appended to Name.
-    - 9 “value” columns color-coded from red to green.
-    - If any single “value” < -1 => we suggest a “punt” for that stat.
-    - Basic analysis: if # of “value” columns above 0 < 2 => bad team, etc.
-    """
     formatted_season = season.replace("-", "/")
     season_url = season
-    # Load registered players from session
+    data_type = request.form.get("data_type", "nopunts") if request.method == "POST" else "nopunts"
     registered = session.get("registered_players", {})
     registered_players = registered.get(season, [])
 
-    results = None
-    totals = None
-    analysis = None
-    punts = []  # Store punt suggestions if any stat < -1
+    results = totals = analysis = None
+    punts = punt_buttons = []
 
     if request.method == "POST":
-        players = []
-        for i in range(1, 14):
-            name = request.form.get(f"player{i}", "").strip()
-            if name:
-                players.append(name)
-
-        # Update session
+        players = [
+            request.form.get(f"player{i}", "").strip()
+            for i in range(1, 14)
+            if request.form.get(f"player{i}", "").strip()
+        ]
         registered[season] = players
         session["registered_players"] = registered
         registered_players = players
 
-        if season in data_files:
-            # Read the Excel file for this season
-            file_path = os.path.join(os.path.dirname(__file__), data_files[season])
+        if season in data_files and data_type in data_files[season]:
+            file_path = os.path.join(
+                os.path.dirname(__file__),
+                data_dirs[data_type],
+                data_files[season][data_type]
+            )
             df = pd.read_excel(file_path)
-            df_filtered = df[df['Name'].str.lower().isin([p.lower() for p in players])]
+            if data_type == "tovpunt":
+                df.columns = [c.strip() for c in df.columns]
+                rename_map = {}
+                for c in df.columns:
+                    lc = c.lower()
+                    if lc in ("leagv", "leaguev"):
+                        rename_map[c] = "LeagV"
+                    elif lc in ("puntv", "puntiv"):
+                        rename_map[c] = "puntV"
+                df.rename(columns=rename_map, inplace=True)
 
-            # Convert rows to dict
+            df_filtered = df[df['Name'].str.lower().isin([p.lower() for p in players])]
             results = df_filtered.to_dict(orient="records")
 
-            # Mark “g” < 40 => red plus
             for row in results:
-                if "g" in row and row["g"] < 40:
+                if row.get("g", 0) < 40:
                     row["Name"] = Markup(
-                        row["Name"] + 
-                        " <span style='color: red; font-size: 1.5em; font-weight: bold; text-shadow: 1px 1px 2px black;'>+</span>"
+                        row["Name"] +
+                        " <span style='color:red; font-size:1.5em; font-weight:bold; text-shadow:1px 1px 2px black;'>+</span>"
                     )
 
-            # Exclude unwanted columns
-            columns_to_exclude = ["Round", "Rank", "Value", "Team", "Inj", "Pos", "m/g", "USG", "fga/g", "g"]
+            exclude = ["Round", "Rank", "Value", "Team", "Inj", "Pos", "m/g", "USG", "fga/g", "g"]
             for row in results:
-                for col in columns_to_exclude:
+                for col in exclude:
                     row.pop(col, None)
 
-            # Compute totals row
             totals_series = df_filtered.select_dtypes(include="number").sum(numeric_only=True)
             totals = totals_series.to_dict()
-            for col in columns_to_exclude:
+            for col in exclude:
                 totals.pop(col, None)
             totals["Name"] = "Total"
             totals["Team"] = ""
-
-            # Round numeric values
             for row in results:
-                for k, val in row.items():
-                    if isinstance(val, float):
-                        row[k] = round(val, 2)
-            for k, val in totals.items():
-                if isinstance(val, float):
-                    totals[k] = round(val, 2)
+                for k, v in row.items():
+                    if isinstance(v, float):
+                        row[k] = round(v, 2)
+            for k, v in totals.items():
+                if isinstance(v, float):
+                    totals[k] = round(v, 2)
 
-            # 9 “value” columns
-            value_columns = ["pV", "rV", "aV", "sV", "bV", "toV", "fg%V", "ft%V", "3V"]
-
-            # Color-coding
-            col_min = {}
-            col_max = {}
-            for col in value_columns:
-                if col in df_filtered.columns:
-                    col_min[col] = df_filtered[col].min()
-                    col_max[col] = df_filtered[col].max()
-                else:
-                    col_min[col] = 0
-                    col_max[col] = 0
-
-            # Assign background colors
+            value_cols = ["pV","rV","aV","sV","bV","toV","fg%V","ft%V","3V"]
+            min_max = {c: (df_filtered[c].min() if c in df_filtered else 0,
+                           df_filtered[c].max() if c in df_filtered else 0)
+                       for c in value_cols}
             for row in results:
-                for col in value_columns:
-                    if col in row:
-                        row[f"{col}_color"] = get_color(row[col], col_min[col], col_max[col])
-                    else:
-                        row[f"{col}_color"] = "white"
-            for col in value_columns:
-                if col in totals:
-                    totals[f"{col}_color"] = get_color(totals[col], col_min[col], col_max[col])
-                else:
-                    totals[f"{col}_color"] = "white"
+                for c in value_cols:
+                    mn, mx = min_max[c]
+                    row[f"{c}_color"] = get_color(row.get(c,0), mn, mx)
+            for c in value_cols:
+                mn, mx = min_max[c]
+                totals[f"{c}_color"] = get_color(totals.get(c,0), mn, mx)
 
-            # Basic analysis (count # of columns > 0)
-            above_zero_count = sum(1 for col in value_columns if totals.get(col, 0) > 0)
-            if above_zero_count < 2:
-                analysis = "bad team"
-            elif above_zero_count < 3:
-                analysis = "ok team"
-            elif above_zero_count < 4:
-                analysis = "good team"
+            cnt = sum(1 for c in value_cols if totals.get(c,0)>0)
+            if cnt<2:   analysis="bad team"
+            elif cnt<3: analysis="ok team"
+            elif cnt<4: analysis="good team"
+            else:       analysis="great team"
+
+            punts = [c for c in value_cols if totals.get(c,0)<-1]
+            if punts:
+                for r in range(1,len(punts)+1):
+                    for combo in itertools.combinations(punts,r):
+                        punt_buttons.append("+".join(combo))
+                punt_buttons.insert(0,"no punts")
             else:
-                analysis = "great team"
+                punt_buttons=["no punts"]
 
-            # Punt suggestions if totals[col] < -1
-            for col in value_columns:
-                if totals.get(col, 0) < -1:
-                    punts.append(col)
+            if data_type=="nopunts":
+                for row in results:
+                    row["LeagV"] = ""
+                    row["puntV"] = ""
+                totals["LeagV"] = ""
+                totals["puntV"] = ""
 
     return render_template(
         "team_assemble.html",
@@ -247,24 +254,24 @@ def team_assemble_page(season):
         results=results,
         totals=totals,
         analysis=analysis,
-        punts=punts
+        punt_buttons=punt_buttons,
+        data_type=data_type
     )
 
 @app.route("/autocomplete/<season>")
 def autocomplete(season):
-    """
-    Auto-complete route for the player names, called via jQuery UI.
-    """
-    term = request.args.get('term', '').lower()
-    suggestions = []
-    if season in data_files:
-        file_path = os.path.join(os.path.dirname(__file__), data_files[season])
-        df = pd.read_excel(file_path)
-        names = df['Name'].dropna().unique()
-        for name in names:
+    term = request.args.get("term","").lower()
+    suggestions=[]
+    data_type="nopunts"
+    if season in data_files and data_type in data_files[season]:
+        fp = os.path.join(os.path.dirname(__file__),
+                          data_dirs[data_type],
+                          data_files[season][data_type])
+        df=pd.read_excel(fp)
+        for name in df['Name'].dropna().unique():
             if term in name.lower():
                 suggestions.append(name)
     return jsonify(suggestions)
 
-if __name__ == "__main__":
+if __name__=="__main__":
     app.run(debug=True)

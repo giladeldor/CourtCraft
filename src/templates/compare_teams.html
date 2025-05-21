@@ -1,0 +1,141 @@
+{% extends 'base.html' %}
+{% block title %}Compare Teams – NBA Fantasy{% endblock %}
+
+{% block content %}
+  <div class="text-center my-4">
+    <h1>Compare Teams: {{ season }}</h1>
+  </div>
+
+  <form method="POST" class="mb-5">
+    <!-- Team Name Inputs -->
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <label for="teamA_name" class="form-label">Team A Name</label>
+        <input
+          type="text"
+          id="teamA_name"
+          name="teamA_name"
+          class="form-control"
+          placeholder="e.g. Lakers"
+          value="{{ teamA_name }}"
+        >
+      </div>
+      <div class="col-md-6">
+        <label for="teamB_name" class="form-label">Team B Name</label>
+        <input
+          type="text"
+          id="teamB_name"
+          name="teamB_name"
+          class="form-control"
+          placeholder="e.g. Celtics"
+          value="{{ teamB_name }}"
+        >
+      </div>
+    </div>
+
+    <!-- Roster Inputs -->
+    <div class="row">
+      <div class="col-md-6">
+        <h5 class="mb-2">{{ teamA_name }}</h5>
+        {% for i in range(1,14) %}
+          <input
+            type="text"
+            name="A_player{{ i }}"
+            class="form-control player-input mb-2"
+            placeholder="Player A-{{ i }}"
+            value="{{ teamA[i-1] if teamA|length >= i else '' }}"
+            autocomplete="off"
+          >
+        {% endfor %}
+      </div>
+      <div class="col-md-6">
+        <h5 class="mb-2">{{ teamB_name }}</h5>
+        {% for i in range(1,14) %}
+          <input
+            type="text"
+            name="B_player{{ i }}"
+            class="form-control player-input mb-2"
+            placeholder="Player B-{{ i }}"
+            value="{{ teamB[i-1] if teamB|length >= i else '' }}"
+            autocomplete="off"
+          >
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="text-center mt-4">
+      <button type="submit" class="btn btn-success">Compare</button>
+      <a href="{{ url_for('season_page', season=season_url) }}"
+         class="btn btn-secondary ms-2">← Back</a>
+    </div>
+  </form>
+
+  {% if comparison %}
+    <h3 class="text-center mb-3">Comparison Results</h3>
+    <div class="table-responsive">
+      <table class="table table-bordered table-sm mx-auto" style="max-width:600px">
+        <thead class="table-light">
+          <tr>
+            <th>Stat</th>
+            <th>{{ teamA_name }}</th>
+            <th>{{ teamB_name }}</th>
+            <th>Winner</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in comparison %}
+            <tr>
+              <td>{{ row.stat }}</td>
+              <td>{{ row.teamA }}</td>
+              <td>{{ row.teamB }}</td>
+              <td>
+                {% if row.winner == "Tie" %}
+                  <span class="text-muted">Tie</span>
+                {% else %}
+                  <strong>{{ row.winner }}</strong>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if match_winner %}
+      <div class="alert alert-primary text-center mt-4">
+        <h4>Overall Winner: <strong>{{ match_winner }}</strong></h4>
+      </div>
+    {% endif %}
+
+    {% if teamA_advice %}
+      <div class="alert alert-warning mt-3">
+        <h5>Advice for {{ teamA_name }}:</h5>
+        <ul class="text-start">
+          {% for advice in teamA_advice %}
+            <li>{{ advice }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+  {% endif %}
+
+  <!-- Autocomplete JS -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <link rel="stylesheet"
+        href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+  <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+  <script>
+    $(function(){
+      $('.player-input').autocomplete({
+        source(request, response) {
+          $.getJSON(
+            "{{ url_for('autocomplete', season=season_url) }}",
+            { term: request.term },
+            response
+          );
+        },
+        minLength: 2
+      });
+    });
+  </script>
+{% endblock %}

@@ -2,13 +2,47 @@
 {% block title %}{{ title }} – NBA Fantasy{% endblock %}
 
 {% block content %}
-  <h1>{{ title }}</h1>
-  <p class="lead">{{ description or 'Explore stats & build your dream team!' }}</p>
+  <div class="text-center my-4">
+    <h1>{{ title }}</h1>
+    {% if headline %}<h4 class="mt-2">{{ headline }}</h4>{% endif %}
+    {% if description %}<p>{{ description }}</p>{% endif %}
+    {% if top_teams %}
+      <h5>Top Teams:</h5>
+      <ul class="list-unstyled">
+        {% for team in top_teams %}
+          <li>• {{ team }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+    {% if image %}
+      <img src="{{ image }}" alt="Season image"
+           class="img-fluid my-3" style="max-height:300px;">
+    {% endif %}
 
-  {% if image %}
-    <img src="{{ image }}" class="img-fluid mb-4" alt="Season image">
-  {% endif %}
+    <div class="mt-4">
+      <!-- 1) Show Stats (basic leaders) -->
+      <a
+        href="{{ url_for('season_data_page', season=season_url) }}"
+        class="btn btn-secondary me-2"
+      >Show Stats</a>
 
-  <a href="/season/{{ season_url }}/data"   class="btn btn-primary me-2">View Stats</a>
-  <a href="/season/{{ season_url }}/team"   class="btn btn-secondary">Assemble Team</a>
+      <!-- 2) Assemble Team -->
+      <a
+        href="{{ url_for('team_assemble_page', season=season_url) }}"
+        class="btn btn-primary me-2"
+      >Assemble Team</a>
+
+      <!-- 3) Compare Teams -->
+      <a
+        href="{{ url_for('compare_teams', season=season_url) }}"
+        class="btn btn-primary"
+      >Compare Teams</a>
+    </div>
+
+    <div class="mt-4">
+      <a href="{{ url_for('home') }}" class="btn btn-outline-dark">
+        ← Back to Home
+      </a>
+    </div>
+  </div>
 {% endblock %}

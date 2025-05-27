@@ -51,7 +51,7 @@ def init_db():
 init_db()
 
 # -----------------------------------------------------------------------------
-# CONTEXT PROCESSOR
+# CONTEXT PROCESSOR (injects into all templates)
 # -----------------------------------------------------------------------------
 @app.context_processor
 def inject_globals():
@@ -61,7 +61,7 @@ def inject_globals():
     }
 
 # -----------------------------------------------------------------------------
-# DATA FILE CONFIG
+# DATA FILE CONFIGURATION
 # -----------------------------------------------------------------------------
 data_dirs = {
     "nopunts": "Nopunts",
@@ -91,24 +91,24 @@ data_files = {
 }
 
 # -----------------------------------------------------------------------------
-# ALLOWED EXCEL UPLOAD
+# ALLOWED EXCEL EXTENSIONS
 # -----------------------------------------------------------------------------
 ALLOWED_EXT = {"xls", "xlsx"}
 def allowed_file(filename):
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXT
+    return "." in filename and filename.rsplit(".",1)[1].lower() in ALLOWED_EXT
 
 # -----------------------------------------------------------------------------
-# UTILITIES
+# UTILITY: Color scale
 # -----------------------------------------------------------------------------
 def get_color(value, min_val, max_val):
     if pd.isna(value) or min_val == max_val:
         return "hsl(60,100%,85%)"
     ratio = (value - min_val) / (max_val - min_val)
-    hue = 120 * ratio
+    hue = 120 * ratio  # 0=red → 120=green
     return f"hsl({hue},100%,85%)"
 
 # -----------------------------------------------------------------------------
-# SEASONS
+# NBA SEASONS
 # -----------------------------------------------------------------------------
 nba_seasons = [f"{y%100:02d}/{(y+1)%100:02d}" for y in range(2024, 2010, -1)]
 season_data = {
@@ -120,12 +120,15 @@ season_data = {
 }
 
 # -----------------------------------------------------------------------------
-# ROUTES: Home & Season Pages
+# ROUTE: Home (carousel of seasons)
 # -----------------------------------------------------------------------------
 @app.route("/")
 def home():
     return render_template("home.html", seasons=nba_seasons)
 
+# -----------------------------------------------------------------------------
+# ROUTE: Season landing page
+# -----------------------------------------------------------------------------
 @app.route("/season/<season>")
 def season_page(season):
     formatted = season.replace("-", "/")
@@ -138,19 +141,17 @@ def season_page(season):
     )
 
 # -----------------------------------------------------------------------------
-# ROUTE: Season Data (must exist for url_for to resolve)
+# ROUTE: Basic data view (must exist for url_for to resolve)
 # -----------------------------------------------------------------------------
 @app.route("/season/<season>/data")
 def season_data_page(season):
-    # load default nopunts Excel
-    file_path = os.path.join(
-        os.path.dirname(__file__),
-        data_dirs["nopunts"],
-        data_files[season]["nopunts"]
-    )
-    df = pd.read_excel(file_path)
+    # Load default “nopunts” dataset
+    fp = os.path.join(os.path.dirname(__file__),
+                      data_dirs["nopunts"],
+                      data_files[season]["nopunts"])
+    df = pd.read_excel(fp)
 
-    # placeholder processing – replace with your real logic
+    # Placeholder – replace with your real processing or helper
     results = {}
 
     return render_template(
@@ -160,17 +161,19 @@ def season_data_page(season):
     )
 
 # -----------------------------------------------------------------------------
-# ROUTE: Team Assembly (with optional Excel upload)
+# ROUTE: Team assembly (with optional Excel upload)
 # -----------------------------------------------------------------------------
-@app.route("/season/<season>/team", methods=["GET", "POST"])
+@app.route("/season/<season>/team", methods=["GET","POST"])
 def team_assemble_page(season):
     formatted = season.replace("-", "/")
     season_url = season
-    raw_type = request.form.get("data_type", "nopunts") if request.method == "POST" else "nopunts"
+
+    # Determine data_type
+    raw_type = request.form.get("data_type", "nopunts") if request.method=="POST" else "nopunts"
     data_type = "tovpunt" if "tov" in raw_type else "nopunts"
 
-    # On GET, load last saved roster if any
-    if request.method == "GET" and session.get("user_id"):
+    # On GET, load last-saved roster
+    if request.method=="GET" and session.get("user_id"):
         db = get_db()
         row = db.execute(
             "SELECT players,data_type FROM teams "
@@ -189,62 +192,66 @@ def team_assemble_page(season):
     results = totals = analysis = None
     punt_buttons = []
 
-    if request.method == "POST":
-        # 1) collect roster
+    if request.method=="POST":
+        # 1) Collect roster names
         registered = [
             request.form.get(f"player{i}", "").strip()
-            for i in range(1, 14)
+            for i in range(1,14)
             if request.form.get(f"player{i}", "").strip()
         ]
-        # 2) save roster
+        # 2) Persist to DB
         if session.get("user_id"):
             db = get_db()
             db.execute(
                 "INSERT INTO teams(user_id,season,players,data_type,created_at) "
                 "VALUES(?,?,?,?,?)",
-                (session["user_id"], season, json.dumps(registered),
-                 raw_type, datetime.now().isoformat())
+                (
+                  session["user_id"],
+                  season,
+                  json.dumps(registered),
+                  raw_type,
+                  datetime.now().isoformat()
+                )
             )
             db.commit()
 
-        # 3) load DataFrame from uploaded or default
+        # 3) Load DataFrame (upload or default)
         uploaded = request.files.get("custom_excel")
         if uploaded and allowed_file(uploaded.filename):
             df = pd.read_excel(uploaded)
         else:
-            fp = os.path.join(
-                os.path.dirname(__file__),
-                data_dirs[data_type],
-                data_files[season][data_type]
-            )
+            fp = os.path.join(os.path.dirname(__file__),
+                              data_dirs[data_type],
+                              data_files[season][data_type])
             df = pd.read_excel(fp)
 
+        # Normalize columns and names
         df.columns = [c.strip() for c in df.columns]
         df['Name'] = df['Name'].astype(str).str.strip()
-        if data_type == "tovpunt":
+        if data_type=="tovpunt":
             rename_map = {}
             for c in df.columns:
                 lc = c.lower()
-                if lc in ("leagv", "leaguev"):
+                if lc in ("leagv","leaguev"):
                     rename_map[c] = "LeagV"
-                if lc in ("puntv", "puntiv"):
+                if lc in ("puntv","puntiv"):
                     rename_map[c] = "puntV"
             df.rename(columns=rename_map, inplace=True)
 
-        # filter by roster
+        # Filter by roster
         clean = [n.lower() for n in registered]
         df_f = df[df['Name'].str.lower().isin(clean)]
         results = df_f.to_dict(orient='records')
 
-        # mark injuries & drop extras
+        # Mark injuries & drop unwanted
         exclude = ["Round","Rank","Value","Team","Inj","Pos","m/g","USG","fga/g","g"]
         for r in results:
-            if r.get("g", 0) < 40:
+            if r.get("g",0) < 40:
                 r["Name"] += Markup(" <span style='color:red;font-weight:bold;'>+</span>")
             for c in exclude:
                 r.pop(c, None)
 
-        # totals
+        # Totals
         tot_s = df_f.select_dtypes(include="number").sum(numeric_only=True)
         totals = tot_s.to_dict()
         for c in exclude:
@@ -252,26 +259,26 @@ def team_assemble_page(season):
         totals["Name"] = "Total"
         totals["Team"] = ""
         for k,v in totals.items():
-            if isinstance(v, float):
-                totals[k] = round(v, 2)
+            if isinstance(v,float):
+                totals[k] = round(v,2)
         for r in results:
             for k,v in r.items():
-                if isinstance(v, float):
-                    r[k] = round(v, 2)
+                if isinstance(v,float):
+                    r[k] = round(v,2)
 
-        # coloring & analysis
+        # Color scale & analysis
         val_cols = ["pV","rV","aV","sV","bV","toV","fg%V","ft%V","3V"]
         mins = {c: df_f[c].min() if c in df_f else 0 for c in val_cols}
         maxs = {c: df_f[c].max() if c in df_f else 0 for c in val_cols}
         for r in results:
             for c in val_cols:
-                color = get_color(r.get(c, 0), mins[c], maxs[c])
+                color = get_color(r.get(c,0), mins[c], maxs[c])
                 r[f"{c}_style"] = f'style="background-color:{color}"'
         for c in val_cols:
-            color = get_color(totals.get(c, 0), mins[c], maxs[c])
+            color = get_color(totals.get(c,0), mins[c], maxs[c])
             totals[f"{c}_style"] = f'style="background-color:{color}"'
 
-        cnt = sum(1 for c in val_cols if totals.get(c,0) > 0)
+        cnt = sum(1 for c in val_cols if totals.get(c,0)>0)
         if cnt < 2:
             analysis = "bad team"
         elif cnt < 3:
@@ -281,17 +288,18 @@ def team_assemble_page(season):
         else:
             analysis = "great team"
 
-        # punt combinations
-        punts = [c for c in val_cols if totals.get(c,0) < -1]
+        # Punt combinations advice
+        punts = [c for c in val_cols if totals.get(c,0)<-1]
         if punts:
-            for r in range(1, len(punts)+1):
-                for combo in itertools.combinations(punts, r):
+            for r in range(1,len(punts)+1):
+                for combo in itertools.combinations(punts,r):
                     punt_buttons.append("+".join(combo))
-            punt_buttons.insert(0, "nopunts")
+            punt_buttons.insert(0,"nopunts")
         else:
             punt_buttons = ["nopunts"]
 
-        if data_type == "nopunts":
+        # Clear extra cols when nopunts
+        if data_type=="nopunts":
             for r in results:
                 r["LeagV"] = r["puntV"] = ""
             totals["LeagV"] = totals["puntV"] = ""
@@ -310,15 +318,15 @@ def team_assemble_page(season):
     )
 
 # -----------------------------------------------------------------------------
-# ROUTE: Compare Teams
+# ROUTE: Compare two teams
 # -----------------------------------------------------------------------------
 @app.route("/season/<season>/compare", methods=["GET","POST"])
 def compare_teams(season):
     formatted = season.replace("-", "/")
     data_type = "nopunts"
 
-    teamA_name = (request.form.get("teamA_name") or "Team A") if request.method=="POST" else "Team A"
-    teamB_name = (request.form.get("teamB_name") or "Team B") if request.method=="POST" else "Team B"
+    teamA_name = request.form.get("teamA_name","Team A") if request.method=="POST" else "Team A"
+    teamB_name = request.form.get("teamB_name","Team B") if request.method=="POST" else "Team B"
 
     teamA=[]; teamB=[]
     comparison=None; match_winner=None; teamA_advice=[]
@@ -327,19 +335,17 @@ def compare_teams(season):
         teamA = [request.form.get(f"A_player{i}","").strip() for i in range(1,14) if request.form.get(f"A_player{i}","").strip()]
         teamB = [request.form.get(f"B_player{i}","").strip() for i in range(1,14) if request.form.get(f"B_player{i}","").strip()]
 
-        fp = os.path.join(
-            os.path.dirname(__file__),
-            data_dirs[data_type],
-            data_files[season][data_type]
-        )
+        fp = os.path.join(os.path.dirname(__file__),
+                          data_dirs[data_type],
+                          data_files[season][data_type])
         df = pd.read_excel(fp)
         df['Name'] = df['Name'].astype(str).str.strip()
 
         val_cols = ["pV","rV","aV","sV","bV","toV","fg%V","ft%V","3V"]
         def sum_stats(roster):
             sub = df[df['Name'].str.lower().isin([n.lower() for n in roster])]
-            s = sub[val_cols].sum(numeric_only=True)
-            return {c: round(s[c],2) for c in val_cols}
+            s   = sub[val_cols].sum(numeric_only=True)
+            return {c:round(s[c],2) for c in val_cols}
 
         totalsA = sum_stats(teamA)
         totalsB = sum_stats(teamB)
@@ -347,22 +353,19 @@ def compare_teams(season):
         comp=[]; cntA=cntB=0
         for c in val_cols:
             a = totalsA.get(c,0); b = totalsB.get(c,0)
-            if a > b:
-                winner = teamA_name; cntA+=1
-            elif b > a:
-                winner = teamB_name; cntB+=1
+            if a>b:
+                winner=teamA_name; cntA+=1
+            elif b>a:
+                winner=teamB_name; cntB+=1
                 teamA_advice.append(f"You need to improve {c}.")
             else:
-                winner = "Tie"
+                winner="Tie"
             comp.append({"stat":c,"teamA":a,"teamB":b,"winner":winner})
-        comparison = comp
+        comparison=comp
 
-        if cntA > cntB:
-            match_winner = teamA_name
-        elif cntB > cntA:
-            match_winner = teamB_name
-        else:
-            match_winner = "Tie"
+        if cntA>cntB:    match_winner=teamA_name
+        elif cntB>cntA:  match_winner=teamB_name
+        else:            match_winner="Tie"
 
     return render_template(
         "compare_teams.html",
@@ -378,7 +381,7 @@ def compare_teams(season):
     )
 
 # -----------------------------------------------------------------------------
-# ROUTES: Auth / Register / Login / Logout / List Teams / Autocomplete
+# ROUTES: Authentication
 # -----------------------------------------------------------------------------
 @app.route("/auth")
 def auth():
@@ -451,11 +454,9 @@ def list_teams():
 def autocomplete(season):
     term = request.args.get("term","").lower()
     suggestions=[]
-    fp = os.path.join(
-        os.path.dirname(__file__),
-        data_dirs["nopunts"],
-        data_files[season]["nopunts"]
-    )
+    fp = os.path.join(os.path.dirname(__file__),
+                      data_dirs["nopunts"],
+                      data_files[season]["nopunts"])
     df = pd.read_excel(fp)
     for name in df['Name'].dropna().unique():
         if term in name.lower():

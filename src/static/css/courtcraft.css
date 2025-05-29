@@ -11,10 +11,12 @@ html, body {
   height: 100%;
 }
 
+/* BODY GETS THE COURT BACKGROUND */
 body {
   display: flex;
   flex-direction: column;
-  background-color: #f4f4f4;
+  background: url('../img/court-bg.jpg') no-repeat center center fixed;
+  background-size: cover;
   font-family: 'Segoe UI', sans-serif;
 }
 
@@ -27,11 +29,12 @@ body {
   color: var(--accent-white) !important;
 }
 
-/* HERO (full‐bleed parquet) */
+/* HERO (transparent now, letting body bg show through) */
 .hero {
   width: 100vw;
   height: 60vh;
-  background: url('../img/court-bg.jpg') no-repeat center/cover;
+  /* remove its own bg so you see the body background */
+  background: transparent;
   color: white;
   display: flex;
   flex-direction: column;
@@ -41,43 +44,75 @@ body {
   text-align: center;
 }
 
-/* SEASON CAROUSEL WRAPPER (with debug border) */
+/* SEASON CAROUSEL WRAPPER (also transparent) */
 .carousel-wrapper {
-  width: 100%;             
-  min-height: 40vh;        
+  width: 100vw;
+  min-height: 40vh;
   display: flex;
-  justify-content: center;  
-  align-items: center;      
-  background-color: #f4f4f4;
-  border: 2px solid black;  
-  box-sizing: border-box;   
-  padding: 1rem 0;          
+  justify-content: center;
+  align-items: center;
+  /* remove its own bg too */
+  background: transparent;
+  padding: 1rem 0;
+  position: relative;
 }
 
-/* Let Bootstrap do its thing, but force each slide to be full-width */
+/* -------------------------------------------------------------------
+   Season page “hero” — full-width parquet background with centered content
+   ------------------------------------------------------------------- */
+.season-hero {
+  width: 100vw;
+  background: url('../img/court-bg.jpg') no-repeat center/cover;
+  background-size: cover;
+  /* make it at least tall enough, adjust as desired */
+  min-height: 60vh;
+}
+
+/* Text styling inside hero */
+.season-hero .season-title {
+  font-size: 2.5rem;
+  color: var(--secondary-navy);
+}
+.season-hero .season-desc {
+  font-size: 1.1rem;
+  color: var(--accent-white);
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.6);
+}
+
+/* Ensure .season-hero’s flex alignment holds on small viewports */
+@media (max-width: 767px) {
+  .season-hero {
+    align-items: flex-start;  /* so mobile padding shows */
+  }
+}
+
+/* -------------------------------------------------------------------
+   Season page carousel
+   ------------------------------------------------------------------- */
+
+/* BOOTSTRAP CAROUSEL OVERRIDES */
 #seasonCarousel {
   width: 100%;
-  margin: 0;
   overflow: visible;
+  margin: 0;
 }
 
 #seasonCarousel .carousel-inner {
   display: flex;
-  /* remove overflow: hidden; */
 }
 
 #seasonCarousel .carousel-item {
-  flex: 0 0 100%;     /* each slide now takes 100% of the wrapper */
+  flex: 0 0 100%;
   display: none;
   justify-content: center;
   align-items: center;
 }
 
 #seasonCarousel .carousel-item.active {
-  display: flex;      /* only the active one shows */
+  display: flex;
 }
 
-/* shrink side controls so they don’t push your button */
+/* shrink controls so button stays centered */
 #seasonCarousel .carousel-control-prev,
 #seasonCarousel .carousel-control-next {
   width: 5%;
@@ -107,7 +142,7 @@ h1, h2, h3, h4, h5 {
   color: var(--secondary-navy);
 }
 
-/* MAKE MAIN FILL VERTICAL SPACE */
+/* MAIN + CONTENT CONTAINERS */
 main {
   flex: 1;
   display: flex;
@@ -115,6 +150,9 @@ main {
 }
 .container {
   flex: 1;
+  /* make sure containers are transparent too */
+  background: transparent;
+  padding-top: 0;  /* if you had extra spacing */
 }
 
 /* FOOTER */

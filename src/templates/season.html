@@ -1,21 +1,40 @@
 {% extends 'base.html' %}
 {% block title %}{{ title }} – CourtCraft{% endblock %}
 
-{% block content %}
-  <div class="card my-4 shadow-sm">
-    <div class="card-body text-center">
-      <h2 class="card-title">{{ title }}</h2>
-      <p class="card-text">{{ description or '' }}</p>
-
-      {% if image %}
-        <img src="{{ image }}" class="img-fluid rounded mb-3" alt="{{ title }}">
-      {% endif %}
+{# ————————————————————————————————————————————————————————————————————————————
+   FULLWIDTH hero at the top, spanning the entire viewport width
+   ———————————————————————————————————————————————————————————————————————————— #}
+{% block fullwidth %}
+  <div class="season-hero d-flex align-items-center">
+    <div class="container text-center">
+      <h2 class="display-4 mb-4 text-white">{{ title }}</h2>
 
       <div class="d-grid gap-2 col-md-6 mx-auto">
-        <a href="{{ url_for('season_data_page', season=season_url) }}" class="btn btn-primary">View Stats Leaders</a>
-        <a href="{{ url_for('team_assemble_page', season=season_url) }}" class="btn btn-secondary">Assemble Team</a>
-        <a href="{{ url_for('compare_teams', season=season_url) }}" class="btn btn-secondary">Compare Teams</a>
+        <a
+          href="{{ url_for('season_data_page', season=season_url) }}"
+          class="btn btn-lg btn-primary"
+        >
+          View Stats Leaders
+        </a>
+        <a
+          href="{{ url_for('team_assemble_page', season=season_url) }}"
+          class="btn btn-lg btn-secondary"
+        >
+          Assemble Team
+        </a>
+        <a
+          href="{{ url_for('compare_teams', season=season_url) }}"
+          class="btn btn-lg btn-secondary"
+        >
+          Compare Teams
+        </a>
       </div>
     </div>
   </div>
+{% endblock %}
+
+{# ————————————————————————————————————————————————————————————————————————————
+   If you want anything *below* the hero, put it here; otherwise leave empty.
+   ———————————————————————————————————————————————————————————————————————————— #}
+{% block content %}
 {% endblock %}

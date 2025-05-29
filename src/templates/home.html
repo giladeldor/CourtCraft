@@ -1,45 +1,54 @@
 {% extends 'base.html' %}
-{% block title %}Home – NBA Fantasy{% endblock %}
+{% block title %}Home – CourtCraft{% endblock %}
 
-{% block content %}
-  <div class="mt-5">
-    <h1 class="text-center mb-4">Welcome to NBA Fantasy Calculator</h1>
-    <div
-      id="seasonCarousel"
-      class="carousel slide"
+{% block fullwidth %}
+  <!-- Hero (full-bleed parquet) -->
+  <div class="hero">
+    <h1>Welcome to CourtCraft</h1>
+    <p class="lead">Craft your perfect fantasy lineup—powered by real NBA stats.</p>
+  </div>
+
+  <!-- Seasons carousel (full-bleed) -->
+  <div class="carousel-wrapper">
+    <div 
+      id="seasonCarousel" 
+      class="carousel slide" 
+      data-bs-interval="false" 
+      data-bs-keyboard="true" 
       tabindex="0"
     >
-      <div class="carousel-inner d-flex justify-content-center">
+      <div class="carousel-inner">
         {% for s in seasons %}
           <div class="carousel-item {% if loop.first %}active{% endif %}">
-            <a href="{{ url_for('season_page', season=s|replace('/', '-')) }}"
-               class="btn btn-lg btn-outline-warning text-uppercase">
+            <a 
+              href="{{ url_for('season_page', season=s|replace('/', '-')) }}" 
+              class="btn btn-lg btn-outline-warning text-uppercase"
+            >
               {{ s }}
             </a>
           </div>
         {% endfor %}
       </div>
-      <button class="carousel-control-prev" type="button"
-              data-bs-target="#seasonCarousel" data-bs-slide="prev">
+      <button 
+        class="carousel-control-prev" 
+        type="button" 
+        data-bs-target="#seasonCarousel" 
+        data-bs-slide="prev"
+      >
         <span class="carousel-control-prev-icon"></span>
       </button>
-      <button class="carousel-control-next" type="button"
-              data-bs-target="#seasonCarousel" data-bs-slide="next">
+      <button 
+        class="carousel-control-next" 
+        type="button" 
+        data-bs-target="#seasonCarousel" 
+        data-bs-slide="next"
+      >
         <span class="carousel-control-next-icon"></span>
       </button>
     </div>
   </div>
+{% endblock %}
 
-  {# --- Bootstrap JS --- #}
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <script>
-    // explicit Carousel init + focus for keyboard control
-    const el = document.getElementById('seasonCarousel');
-    const carousel = new bootstrap.Carousel(el, {
-      interval: false,
-      keyboard: true,
-      ride: false
-    });
-    el.focus();
-  </script>
+{% block content %}
+  {# any additional homepage content would go here #}
 {% endblock %}

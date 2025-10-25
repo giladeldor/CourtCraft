@@ -68,6 +68,9 @@ data_dirs = {
     "tovpunt": "Tovpunts"
 }
 data_files = {
+    "25-26": {
+        "nopunts": "BBM_PlayerRankings2526_nopunt.xls",
+    },
     "24-25": {
         "nopunts": "BBM_PlayerRankings2425_nopunt.xls",
         "tovpunt": "BBM_PlayerRankings2425_tovpunt.xls"
@@ -110,8 +113,9 @@ def get_color(value, min_val, max_val):
 # -----------------------------------------------------------------------------
 # NBA SEASONS
 # -----------------------------------------------------------------------------
-nba_seasons = [f"{y%100:02d}/{(y+1)%100:02d}" for y in range(2024, 2010, -1)]
+nba_seasons = [f"{y%100:02d}/{(y+1)%100:02d}" for y in range(2025, 2010, -1)]
 season_data = {
+    "25-26": {"title": "2025/26 NBA Season"},
     "24-25": {"title": "2024/25 NBA Season"},
     "23-24": {"title": "2023/24 NBA Season"},
     "22-23": {"title": "2022/23 NBA Season"},

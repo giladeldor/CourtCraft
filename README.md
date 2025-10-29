@@ -1,40 +1,93 @@
-# CourtCraft 📸
+# CourtCraft 🏀 — NBA Fantasy Calculator
 
-> Craft your perfect fantasy lineup—powered by real NBA stats.
+A Flask + Bootstrap web app to explore NBA season stats, build fantasy teams, and compare lineups.
+This repository contains a small SQLite-backed Flask server and a responsive UI styled with Bootstrap 5.
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)  
-[![Python version](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)  
-[![Flask](https://img.shields.io/badge/flask-2.0%2B-orange.svg)](https://flask.palletsprojects.com/)
-
----
-
-## 🏀 What Is CourtCraft?
-
-CourtCraft is a web application (built with **Flask** and **Pandas**) that lets you:
-
-1. **Browse NBA season leaders** in nine statistical categories (points, rebounds, assists, steals, blocks, turnovers, FG%, FT%, 3-point makes).  
-2. **Assemble a custom fantasy team** of up to 13 players and receive a color‐coded analysis that highlights your strengths and weaknesses.  
-3. **Compare two fantasy teams** side‐by‐side and see which team “wins” each category.
-
-All underlying data comes from Basketball Monster XLS files (converted to Pandas), so you always get accurate, up-to-date NBA stats.
-
----
+> _This README was auto-polished on 2025-10-29 12:52 UTC._
 
 ## ✨ Features
+- Browse by season, with curated labels (e.g., **2022/23 NBA Season**)
+- Assemble teams and compare them across stats
+- Autocomplete helpers for player search
+- Simple auth endpoints (register/login/logout) with SQLite
+- Clean Bootstrap 5 layout with a custom `courtcraft.css` theme
 
-- **Full-bleed basketball‐floor background** on every page for immersive NBA vibes  
-- **Autocomplete** for player names, pulling directly from the season’s Excel roster  
-- **Color‐coded “Value” columns** that show at a glance whether a stat is good (green) or below average (red)  
-- **“Punts” detection** (automatically suggests if you are punting certain categories)  
-- **Persistent user login** (username/password + SQLite) to save your favorite teams per season  
-- **Responsive design** using Bootstrap 5, so it looks great on desktop and mobile
+## 🧰 Tech Stack
+- **Backend:** Flask, SQLite (via Python stdlib)
+- **Frontend:** Jinja templates, Bootstrap 5
+- **Data:** pandas for CSV/Excel loading and transformations
+
+## 🚀 Quickstart
+```bash
+# 1) Create a virtual env (recommended)
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
+# 2) Install deps
+pip install -r requirements.txt
+
+# 3) Configure environment (optional)
+cp .env.example .env  # then edit SECRET_KEY
+
+# 4) Run the app
+flask --app NBAFantasyCalculator/src/app.py --debug run
+# Or:
+python NBAFantasyCalculator/src/app.py
+```
+
+## 🗂️ Project Structure
+```
+NBAFantasyCalculator/
+├─ NBAFantasyCalculator/
+│  ├─ src/
+│  │  ├─ app.py
+│  │  ├─ templates/
+│  │  │  ├─ base.html
+│  │  │  ├─ home.html
+│  │  │  ├─ season.html
+│  │  │  ├─ team_assemble.html
+│  │  │  ├─ compare_teams.html
+│  │  │  └─ auth.html
+│  │  └─ static/
+│  │     └─ css/courtcraft.css
+└─ README.md
+```
+
+## 🌐 Routes
+| Route Decorator | Handler |
+|---|---|
+| `"/"` | `home` |
+| `"/season/<season>"` | `season_page` |
+| `"/season/<season>/data"` | `season_data_page` |
+| `"/season/<season>/team", methods=["GET","POST"]` | `team_assemble_page` |
+| `"/season/<season>/compare", methods=["GET","POST"]` | `compare_teams` |
+| `"/auth"` | `auth` |
+| `"/register", methods=["POST"]` | `register` |
+| `"/login", methods=["POST"]` | `login` |
+| `"/logout"` | `logout` |
+| `"/teams"` | `list_teams` |
+| `"/autocomplete/<season>"` | `autocomplete` |
+
+Common pages include:
+- `/` — Home
+- `/season/<season>` — Season page
+- `/season/<season>/team` — Team assembly
+- `/season/<season>/compare` — Team comparison
+- `/auth` — Auth page
+
+## ⚙️ Configuration
+- **Database:** `users.db` in `src/` is created automatically (SQLite).
+- **Environment:** `.env` file is supported (via `python-dotenv`) for local dev.
+
+## 🧪 Data Ingestion
+- pandas is used to load and process CSV/XLS files. Place sample data under a data folder (e.g., `NBAFantasyCalculator/data/`) and adjust the file paths in `app.py` if needed.
+
+## 📸 Screenshots
+Add a few screenshots or GIFs here to showcase the flows.
+
+## 🛡️ Notes
+- Do not commit real secrets. Keep `.env` local.
+- For production, consider gunicorn/uvicorn behind a reverse proxy, and a proper database.
 
 ---
-
-## 📦 Installation (Local Development)
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/yourusername/CourtCraft.git
-cd CourtCraft
+Happy hacking!

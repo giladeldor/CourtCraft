@@ -9,6 +9,7 @@ from flask import (
     session, flash, redirect, url_for
 )
 from datetime import datetime
+    # Markup used earlier to append a red plus; keeping import although unused below
 from markupsafe import Markup
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -101,7 +102,7 @@ def allowed_file(filename):
     return "." in filename and filename.rsplit(".",1)[1].lower() in ALLOWED_EXT
 
 # -----------------------------------------------------------------------------
-# UTILITY: Color scale
+# UTILITY: Color scale (used in assemble)
 # -----------------------------------------------------------------------------
 def get_color(value, min_val, max_val):
     if pd.isna(value) or min_val == max_val:
@@ -124,7 +125,7 @@ season_data = {
 }
 
 # -----------------------------------------------------------------------------
-# ROUTE: Home (carousel of seasons)
+# ROUTE: Home
 # -----------------------------------------------------------------------------
 @app.route("/")
 def home():
@@ -145,19 +146,15 @@ def season_page(season):
     )
 
 # -----------------------------------------------------------------------------
-# ROUTE: Basic data view (must exist for url_for to resolve)
+# ROUTE: Basic data view (placeholder)
 # -----------------------------------------------------------------------------
 @app.route("/season/<season>/data")
 def season_data_page(season):
-    # Load default “nopunts” dataset
     fp = os.path.join(os.path.dirname(__file__),
                       data_dirs["nopunts"],
                       data_files[season]["nopunts"])
     df = pd.read_excel(fp)
-
-    # Placeholder – replace with your real processing or helper
     results = {}
-
     return render_template(
         "data_calculation.html",
         season=season.replace("-", "/"),
@@ -172,11 +169,9 @@ def team_assemble_page(season):
     formatted = season.replace("-", "/")
     season_url = season
 
-    # Determine data_type
     raw_type = request.form.get("data_type", "nopunts") if request.method=="POST" else "nopunts"
     data_type = "tovpunt" if "tov" in raw_type else "nopunts"
 
-    # On GET, load last-saved roster
     if request.method=="GET" and session.get("user_id"):
         db = get_db()
         row = db.execute(
@@ -197,13 +192,11 @@ def team_assemble_page(season):
     punt_buttons = []
 
     if request.method=="POST":
-        # 1) Collect roster names
         registered = [
             request.form.get(f"player{i}", "").strip()
             for i in range(1,14)
             if request.form.get(f"player{i}", "").strip()
         ]
-        # 2) Persist to DB
         if session.get("user_id"):
             db = get_db()
             db.execute(
@@ -219,7 +212,6 @@ def team_assemble_page(season):
             )
             db.commit()
 
-        # 3) Load DataFrame (upload or default)
         uploaded = request.files.get("custom_excel")
         if uploaded and allowed_file(uploaded.filename):
             df = pd.read_excel(uploaded)
@@ -229,7 +221,6 @@ def team_assemble_page(season):
                               data_files[season][data_type])
             df = pd.read_excel(fp)
 
-        # Normalize columns and names
         df.columns = [c.strip() for c in df.columns]
         df['Name'] = df['Name'].astype(str).str.strip()
         if data_type=="tovpunt":
@@ -242,12 +233,10 @@ def team_assemble_page(season):
                     rename_map[c] = "puntV"
             df.rename(columns=rename_map, inplace=True)
 
-        # Filter by roster
         clean = [n.lower() for n in registered]
         df_f = df[df['Name'].str.lower().isin(clean)]
         results = df_f.to_dict(orient='records')
 
-        # Mark injuries & drop unwanted
         exclude = ["Round","Rank","Value","Team","Inj","Pos","m/g","USG","fga/g","g"]
         for r in results:
             if r.get("g",0) < 40:
@@ -255,7 +244,6 @@ def team_assemble_page(season):
             for c in exclude:
                 r.pop(c, None)
 
-        # Totals
         tot_s = df_f.select_dtypes(include="number").sum(numeric_only=True)
         totals = tot_s.to_dict()
         for c in exclude:
@@ -270,7 +258,6 @@ def team_assemble_page(season):
                 if isinstance(v,float):
                     r[k] = round(v,2)
 
-        # Color scale & analysis
         val_cols = ["pV","rV","aV","sV","bV","toV","fg%V","ft%V","3V"]
         mins = {c: df_f[c].min() if c in df_f else 0 for c in val_cols}
         maxs = {c: df_f[c].max() if c in df_f else 0 for c in val_cols}
@@ -292,7 +279,6 @@ def team_assemble_page(season):
         else:
             analysis = "great team"
 
-        # Punt combinations advice
         punts = [c for c in val_cols if totals.get(c,0)<-1]
         if punts:
             for r in range(1,len(punts)+1):
@@ -302,7 +288,6 @@ def team_assemble_page(season):
         else:
             punt_buttons = ["nopunts"]
 
-        # Clear extra cols when nopunts
         if data_type=="nopunts":
             for r in results:
                 r["LeagV"] = r["puntV"] = ""
@@ -385,7 +370,7 @@ def compare_teams(season):
     )
 
 # -----------------------------------------------------------------------------
-# ROUTES: Authentication
+# AUTH
 # -----------------------------------------------------------------------------
 @app.route("/auth")
 def auth():
@@ -454,18 +439,200 @@ def list_teams():
     } for r in rows]
     return render_template("teams.html", teams=teams)
 
+# -----------------------------------------------------------------------------
+# AUTOCOMPLETE (robust for .xls/.xlsx)
+# -----------------------------------------------------------------------------
+def _read_excel_safe(path: str):
+    if not os.path.exists(path):
+        return None
+    _, ext = os.path.splitext(path.lower())
+    if ext == ".xlsx":
+        for eng in ("openpyxl", None):
+            try:
+                return pd.read_excel(path, engine=eng)
+            except Exception:
+                continue
+    elif ext == ".xls":
+        for eng in ("xlrd", None):
+            try:
+                return pd.read_excel(path, engine=eng)
+            except Exception:
+                continue
+    else:
+        try:
+            return pd.read_excel(path)
+        except Exception:
+            return None
+    return None
+
 @app.route("/autocomplete/<season>")
 def autocomplete(season):
-    term = request.args.get("term","").lower()
-    suggestions=[]
-    fp = os.path.join(os.path.dirname(__file__),
-                      data_dirs["nopunts"],
-                      data_files[season]["nopunts"])
-    df = pd.read_excel(fp)
-    for name in df['Name'].dropna().unique():
-        if term in name.lower():
-            suggestions.append(name)
-    return jsonify(suggestions)
+    term = (request.args.get("term", "") or "").strip().lower()
+    if len(term) < 2:
+        return jsonify([])
+    names = set()
+    for data_type in ("nopunts", "tovpunt"):
+        try:
+            filename = data_files[season][data_type]
+            path = os.path.join(os.path.dirname(__file__), data_dirs[data_type], filename)
+        except KeyError:
+            continue
+        df = _read_excel_safe(path)
+        if df is None or "Name" not in df.columns:
+            continue
+        try:
+            series = (df["Name"].dropna().astype(str).str.strip().unique())
+        except Exception:
+            continue
+        for name in series:
+            if term in name.lower():
+                names.add(name)
+    return jsonify(sorted(names)[:50])
+
+# -----------------------------------------------------------------------------
+# Helper: load latest team for season
+# -----------------------------------------------------------------------------
+def load_latest_team(user_id: int, season: str):
+    db = get_db()
+    row = db.execute(
+        "SELECT players, data_type FROM teams "
+        "WHERE user_id=? AND season=? "
+        "ORDER BY datetime(created_at) DESC LIMIT 1",
+        (user_id, season)
+    ).fetchone()
+    if not row:
+        return [], "nopunts"
+    try:
+        players = json.loads(row["players"]) or []
+    except Exception:
+        players = []
+    return players, row["data_type"]
+
+# -----------------------------------------------------------------------------
+# RECOMMENDATION ENDPOINT
+# -----------------------------------------------------------------------------
+CAT_LABEL_TO_VALCOL = {
+    "PTS": "pV", "REB": "rV", "AST": "aV", "STL": "sV", "BLK": "bV",
+    "TO": "toV", "FG%": "fg%V", "FT%": "ft%V", "3PM": "3V"
+}
+VAL_COLS = ["pV","rV","aV","sV","bV","toV","fg%V","ft%V","3V"]
+
+def _load_df_for_recs(season: str, preferred_type: str):
+    # try preferred, then fallback to nopunts
+    order = [preferred_type] if preferred_type in ("nopunts", "tovpunt") else []
+    if "nopunts" not in order: order.append("nopunts")
+    if "tovpunt" not in order: order.append("tovpunt")
+    for t in order:
+        try:
+            path = os.path.join(os.path.dirname(__file__), data_dirs[t], data_files[season][t])
+        except KeyError:
+            continue
+        df = _read_excel_safe(path)
+        if df is not None:
+            df.columns = [c.strip() for c in df.columns]
+            if "Name" in df.columns:
+                df["Name"] = df["Name"].astype(str).str.strip()
+                return df, t
+    return None, preferred_type or "nopunts"
+
+def _current_totals(df, roster):
+    sub = df[df["Name"].str.lower().isin([n.lower() for n in roster])]
+    totals = sub[VAL_COLS].sum(numeric_only=True)
+    return {c: float(totals.get(c, 0.0)) for c in VAL_COLS}
+
+@app.route("/season/<season>/board/recommend", methods=["POST"])
+def board_recommend(season):
+    """
+    Input JSON:
+      {
+        "taken": [names...],
+        "my_team": [names...],
+        "data_type": "nopunts" | "tovpunt",
+        "scoringType": "9cat" | "8cat",
+        "punts": ["PTS","REB",...],   # optional
+        "roster": {"PG":0,...}        # optional (not enforced yet; placeholder)
+      }
+    Output JSON:
+      { "recommendations": [ { "Name":..., "score":..., "top": [{"stat":"PTS","v":1.2}, ...] }, ... ] }
+    """
+    payload = request.get_json(force=True, silent=True) or {}
+    taken = { (n or "").strip().lower() for n in payload.get("taken", []) }
+    my_team = [ (n or "").strip() for n in payload.get("my_team", []) if n ]
+    data_type = payload.get("data_type", "nopunts")
+    scoring = (payload.get("scoringType") or "9cat").lower()
+    punts_labels = payload.get("punts", []) or []
+
+    # load dataset
+    df, used_type = _load_df_for_recs(season, data_type)
+    if df is None:
+        return jsonify({"recommendations": [], "error": "Dataset not available for this season."})
+
+    # restrict to candidates not already taken or on your team
+    exclude = {n.lower() for n in my_team} | taken
+    cand = df[~df["Name"].str.lower().isin(exclude)].copy()
+
+    # keep only value columns that exist
+    cols = [c for c in VAL_COLS if c in cand.columns]
+    if not cols:
+        return jsonify({"recommendations": [], "error": "Value columns not found in dataset."})
+    cand[cols] = cand[cols].fillna(0.0)
+
+    # 8-cat: ignore TO
+    effective_cols = [c for c in cols if not (scoring == "8cat" and c == "toV")]
+
+    # punts -> zero weight
+    punt_valcols = {CAT_LABEL_TO_VALCOL.get(lbl) for lbl in punts_labels}
+    weights = {c: (0.0 if c in (punt_valcols or set()) else 1.0) for c in effective_cols}
+
+    # need-aware boost: compute your current totals and find 3 weakest cats to boost
+    totals = _current_totals(df, my_team) if my_team else {c:0.0 for c in VAL_COLS}
+    # Only consider effective columns when ranking needs
+    ordered_needs = sorted([c for c in effective_cols], key=lambda c: totals.get(c, 0.0))
+    need_boost_set = set(ordered_needs[:3])  # weakest 3
+    for c in need_boost_set:
+        if weights.get(c,0) > 0:
+            weights[c] += 0.35  # small boost toward weak areas
+
+    # score = weighted sum of candidate's value columns
+    # also capture top contributing categories for explanation
+    scores = []
+    for _, row in cand.iterrows():
+        contrib = {c: float(row[c]) * weights.get(c, 0.0) for c in effective_cols}
+        score = sum(contrib.values())
+        # Get human category labels for top 3 positive contributions
+        top_items = sorted(((c, float(row[c])) for c in effective_cols if weights.get(c,0)>0),
+                           key=lambda x: x[1], reverse=True)[:3]
+        top_readable = []
+        for c, v in top_items:
+            # reverse map to label
+            label = next((lbl for lbl, vc in CAT_LABEL_TO_VALCOL.items() if vc == c), c)
+            top_readable.append({"stat": label, "v": round(v, 2)})
+        scores.append({
+            "Name": row["Name"],
+            "score": round(score, 3),
+            "top": top_readable
+        })
+
+    # sort & limit
+    scores.sort(key=lambda x: x["score"], reverse=True)
+    return jsonify({"recommendations": scores[:25], "used_type": used_type})
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Board page
+# -----------------------------------------------------------------------------
+@app.route("/season/<season>/board", endpoint="board_page")
+def board_page(season):
+    team_players = []
+    team_data_type = "nopunts"
+    if session.get("user_id"):
+        team_players, team_data_type = load_latest_team(session["user_id"], season)
+    return render_template(
+        "board.html",
+        season=season,
+        team_players=team_players,
+        team_data_type=team_data_type
+    )
 
 if __name__ == "__main__":
     app.run(debug=True)

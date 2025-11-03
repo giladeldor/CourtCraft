@@ -58,22 +58,23 @@
     </div>
   </nav>
 
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="container mt-3">
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
   <main class="d-flex flex-column flex-grow-1">
-    {# —————————————————————————————————————————————————————————————————————————————————————— #}
-    {#  FULL-WIDTH BLOCK: nothing here is inside a .container — ideal for your hero/carousel #}
     {% block fullwidth %}{% endblock %}
-    {# —————————————————————————————————————————————————————————————————————————————————————— #}
 
-    {#  Everything below is centered in a Bootstrap .container — your normal page content. #}
     <div class="container py-4 flex-grow-1">
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          {% for category, msg in messages %}
-            <div class="alert alert-{{ category }}">{{ msg }}</div>
-          {% endfor %}
-        {% endif %}
-      {% endwith %}
-
       {% block content %}{% endblock %}
     </div>
   </main>
@@ -85,14 +86,25 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
+      // Carousel setup
       var carouselEl = document.getElementById('seasonCarousel');
       if (carouselEl) {
-        carouselEl.focus();  // allow keyboard nav
+        carouselEl.focus();
         new bootstrap.Carousel(carouselEl, {
           interval: false,
           keyboard: true
         });
       }
+
+      // 🟢 Flash message auto-fade after 5s
+      const alerts = document.querySelectorAll('.alert');
+      alerts.forEach(alert => {
+        setTimeout(() => {
+          alert.classList.remove('show');
+          alert.classList.add('fade');
+          setTimeout(() => alert.remove(), 300); // remove from DOM after fade
+        }, 5000);
+      });
     });
   </script>
 </body>

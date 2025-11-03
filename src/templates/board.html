@@ -1,0 +1,348 @@
+{% extends 'base.html' %}
+{% block title %}Board · {{ season }} · CourtCraft{% endblock %}
+
+{% block fullwidth %}
+  <div class="bg-secondary-navy text-white py-4">
+    <div class="container text-center">
+      <h1 class="h3 mb-1">Draft Board — {{ season.replace('-', '/') }}</h1>
+      <p class="mb-0 opacity-75">Mark taken players, tune league settings, and get player recommendations.</p>
+    </div>
+  </div>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <!-- Taken Players -->
+  <div class="col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">Taken Players</span>
+        <div class="d-flex gap-2">
+          <button class="btn btn-sm btn-outline-secondary" id="btnPaste">Paste List</button>
+          <button class="btn btn-sm btn-outline-danger" id="btnClear">Clear</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <form id="addTakenForm" class="row g-2">
+          <div class="col-8">
+            <input
+              type="text"
+              class="form-control"
+              id="takenInput"
+              placeholder="Type a player name…"
+              list="nameOptions">
+            <datalist id="nameOptions"></datalist>
+          </div>
+          <div class="col-4 d-grid">
+            <button class="btn btn-primary" type="submit">Add</button>
+          </div>
+        </form>
+
+        <div class="mt-3">
+          <div class="d-flex justify-content-between align-items-center">
+            <small class="text-muted">Total taken:</small>
+            <span class="badge text-bg-secondary" id="takenCount">0</span>
+          </div>
+          <ul class="list-group mt-2" id="takenList"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- My Team + League Settings + Recommend -->
+  <div class="col-lg-6">
+    <div class="card shadow-sm mb-3">
+      <div class="card-header fw-semibold">
+        My Team (from Assemble Team)
+        {% if team_data_type == "tovpunt" %}
+          <span class="badge bg-warning text-dark ms-2">TOV Punt</span>
+        {% else %}
+          <span class="badge bg-secondary ms-2">No Punts</span>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        {% if team_players and team_players|length > 0 %}
+          <ul class="list-group">
+            {% for p in team_players %}
+              <li class="list-group-item">{{ p }}</li>
+            {% endfor %}
+          </ul>
+          <div class="mt-3 d-flex gap-2 flex-wrap">
+            <a class="btn btn-outline-primary" href="{{ url_for('team_assemble_page', season=season) }}">
+              Update Team
+            </a>
+            <button class="btn btn-success" id="btnRecommend">Recommend</button>
+          </div>
+        {% else %}
+          <div class="alert alert-info mb-2 d-flex justify-content-between align-items-center">
+            <span>No saved team found for this season.</span>
+            <a class="btn btn-sm btn-primary" href="{{ url_for('team_assemble_page', season=season) }}">Assemble Team</a>
+          </div>
+          <button class="btn btn-success" id="btnRecommend">Recommend</button>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card shadow-sm mb-3">
+      <div class="card-header fw-semibold">League Settings</div>
+      <div class="card-body">
+        <form id="leagueForm" class="vstack gap-3">
+          <div>
+            <label class="form-label">Scoring Type</label>
+            <select class="form-select" id="scoringType">
+              <option value="9cat" selected>9-category</option>
+              <option value="8cat">8-category (TO ignored)</option>
+              <option value="points">Points League (not yet supported)</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Punt Categories (optional)</label>
+            <div class="d-flex flex-wrap gap-2">
+              {% set cats = ["PTS","REB","AST","STL","BLK","3PM","FG%","FT%","TO"] %}
+              {% for c in cats %}
+              <div class="form-check">
+                <input class="form-check-input punt-cat" type="checkbox" value="{{ c }}" id="punt_{{ c }}">
+                <label class="form-check-label" for="punt_{{ c }}">{{ c }}</label>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          <div>
+            <label class="form-label">Roster Constraints (optional)</label>
+            <div class="row g-2">
+              {% for pos in ["PG","SG","SF","PF","C","UTIL"] %}
+              <div class="col-4">
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text">{{ pos }}</span>
+                  <input type="number" min="0" class="form-control roster-limit" data-pos="{{ pos }}" value="0">
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+            <small class="text-muted">Roster limits are not enforced yet in the recommendations — coming next.</small>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold">Top Recommendations</div>
+      <div class="card-body">
+        <div id="recStatus" class="text-muted">Click “Recommend” to get suggestions.</div>
+        <div class="table-responsive mt-2 d-none" id="recTableWrap">
+          <table class="table table-sm align-middle mb-0" id="recTable">
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th class="text-end">Score</th>
+                <th>Top strengths</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const season = {{ season|tojson }};
+  const teamPlayers = {{ (team_players or [])|tojson }};
+  const storageKey = (suffix) => `board:${season}:${suffix}`;
+
+  // Elements
+  const takenInput   = document.getElementById('takenInput');
+  const nameOptions  = document.getElementById('nameOptions');
+  const addTakenForm = document.getElementById('addTakenForm');
+  const takenList    = document.getElementById('takenList');
+  const takenCount   = document.getElementById('takenCount');
+  const btnClear     = document.getElementById('btnClear');
+  const btnPaste     = document.getElementById('btnPaste');
+  const pasteArea    = document.getElementById('pasteArea'); // may be undefined if modal not present in DOM yet
+  const scoringType  = document.getElementById('scoringType');
+  const puntChecks   = Array.from(document.querySelectorAll('.punt-cat'));
+  const rosterLimits = Array.from(document.querySelectorAll('.roster-limit'));
+  const btnSaveConfig= document.getElementById('btnSaveConfig'); // defined in earlier version; optional here
+  const btnRecommend = document.getElementById('btnRecommend');
+
+  const recStatus    = document.getElementById('recStatus');
+  const recTableWrap = document.getElementById('recTableWrap');
+  const recTableBody = document.querySelector('#recTable tbody');
+
+  // Helpers
+  function loadJSON(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } }
+  function saveJSON(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
+  const toKey = (s) => (s || '').trim().toLowerCase();
+
+  // State
+  let taken = loadJSON(storageKey('taken'), []);
+  let config = loadJSON(storageKey('config'), { scoringType: '9cat', punts: [], roster: {} });
+  const takenKeys = new Set(taken.map(toKey));
+
+  // Seed My Team (once)
+  if (!loadJSON(storageKey('seededMyTeam'), false)) {
+    for (const n of (teamPlayers || [])) {
+      const k = toKey(n); if (k && !takenKeys.has(k)) { taken.push(n); takenKeys.add(k); }
+    }
+    saveJSON(storageKey('taken'), taken);
+    saveJSON(storageKey('seededMyTeam'), true);
+  }
+
+  const myTeamSet = new Set((teamPlayers || []).map(toKey));
+
+  // Renderers
+  function renderTaken() {
+    const map = new Map();
+    for (const name of taken) { const k = toKey(name); if (k && !map.has(k)) map.set(k, name); }
+    taken = Array.from(map.values());
+
+    takenList.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    for (const name of taken) {
+      const isMine = myTeamSet.has(toKey(name));
+      const li = document.createElement('li');
+      li.className = 'list-group-item d-flex justify-content-between align-items-center';
+      li.innerHTML = `
+        <div class="d-flex align-items-center gap-2">
+          <span>${name}</span>
+          ${isMine ? "<span class='badge text-bg-info'>My Team</span>" : ""}
+        </div>
+        <button class="btn btn-sm btn-outline-danger" data-name="${name.replace(/"/g,'&quot;')}">&times;</button>`;
+      frag.appendChild(li);
+    }
+    takenList.appendChild(frag);
+    takenCount.textContent = String(taken.length);
+  }
+
+  // Autocomplete (datalist) with debounce + 2-char min + local fallback
+  function localSuggest(term) {
+    const t = (term || "").toLowerCase();
+    const pool = Array.from(new Set([...(taken || []), ...(teamPlayers || [])]));
+    return pool.filter(n => n && n.toLowerCase().includes(t)).slice(0, 30);
+  }
+  let debounceTimer = null;
+  takenInput.addEventListener('input', () => {
+    const term = (takenInput.value || '').trim();
+    clearTimeout(debounceTimer);
+    if (term.length < 2) { nameOptions.innerHTML = ''; return; }
+    debounceTimer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/autocomplete/${season}?term=${encodeURIComponent(term)}`);
+        let suggestions = res.ok ? await res.json() : localSuggest(term);
+        nameOptions.innerHTML = (suggestions || []).slice(0, 30)
+          .map(n => `<option value="${n}"></option>`).join('');
+      } catch {
+        nameOptions.innerHTML = localSuggest(term).map(n => `<option value="${n}"></option>`).join('');
+      }
+    }, 150);
+  });
+
+  // Add / Remove / Clear
+  addTakenForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = (takenInput.value || '').trim();
+    if (!name) return;
+    const k = toKey(name);
+    if (!takenKeys.has(k)) { taken.push(name); takenKeys.add(k); saveJSON(storageKey('taken'), taken); renderTaken(); }
+    takenInput.value = ''; takenInput.focus();
+  });
+
+  takenList.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-name]'); if (!btn) return;
+    const name = btn.getAttribute('data-name'); const k = toKey(name);
+    taken = taken.filter(n => toKey(n) !== k); takenKeys.delete(k); saveJSON(storageKey('taken'), taken); renderTaken();
+  });
+
+  btnClear.addEventListener('click', () => {
+    if (taken.length && confirm('Clear all taken players?')) {
+      taken = []; takenKeys.clear();
+      for (const n of (teamPlayers || [])) { const k = toKey(n); if (k && !takenKeys.has(k)) { taken.push(n); takenKeys.add(k); } }
+      saveJSON(storageKey('taken'), taken); renderTaken();
+    }
+  });
+
+  // Save settings locally (optional button may not be present)
+  if (btnSaveConfig) {
+    btnSaveConfig.addEventListener('click', () => {
+      config.scoringType = scoringType.value;
+      config.punts = puntChecks.filter(ch => ch.checked).map(ch => ch.value);
+      config.roster = Object.fromEntries(rosterLimits.map(inp => [inp.dataset.pos, parseInt(inp.value || '0', 10) || 0]));
+      saveJSON(storageKey('config'), config);
+    });
+  }
+
+  // Recommend
+  btnRecommend.addEventListener('click', async () => {
+    // sync latest UI to config
+    const liveConfig = {
+      scoringType: scoringType.value,
+      punts: puntChecks.filter(ch => ch.checked).map(ch => ch.value),
+      roster: Object.fromEntries(rosterLimits.map(inp => [inp.dataset.pos, parseInt(inp.value || '0', 10) || 0]))
+    };
+    saveJSON(storageKey('config'), liveConfig);
+
+    recStatus.classList.remove('text-danger');
+    recStatus.textContent = 'Calculating…';
+    recTableWrap.classList.add('d-none');
+    recTableBody.innerHTML = '';
+
+    try {
+      const res = await fetch(`/season/${season}/board/recommend`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          taken: taken,
+          my_team: teamPlayers,
+          data_type: {{ (team_data_type or "nopunts")|tojson }},
+          scoringType: liveConfig.scoringType,
+          punts: liveConfig.punts,
+          roster: liveConfig.roster
+        })
+      });
+      const data = await res.json();
+      const recs = data.recommendations || [];
+      if (!recs.length) {
+        recStatus.classList.add('text-danger');
+        recStatus.textContent = data.error || 'No candidates found.';
+        return;
+      }
+
+      const rows = [];
+      for (const r of recs) {
+        const strengths = (r.top || []).map(t => `${t.stat} (+${t.v})`).join(', ');
+        rows.push(`
+          <tr>
+            <td>${r.Name}</td>
+            <td class="text-end">${r.score}</td>
+            <td>${strengths}</td>
+          </tr>
+        `);
+      }
+      recTableBody.innerHTML = rows.join('');
+      recTableWrap.classList.remove('d-none');
+      recStatus.textContent = `Top ${recs.length} suggestions`;
+    } catch (e) {
+      recStatus.classList.add('text-danger');
+      recStatus.textContent = 'Failed to compute recommendations.';
+    }
+  });
+
+  // Init
+  // Ensure UI reflects saved config
+  scoringType.value = (config.scoringType || '9cat');
+  const puntsSet = new Set(config.punts || []);
+  puntChecks.forEach(ch => ch.checked = puntsSet.has(ch.value));
+  rosterLimits.forEach(inp => {
+    const pos = inp.dataset.pos; const v = (config.roster || {})[pos];
+    inp.value = Number.isInteger(v) ? v : 0;
+  });
+
+  renderTaken();
+});
+</script>
+{% endblock %}

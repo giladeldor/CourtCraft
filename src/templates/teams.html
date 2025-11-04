@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% block title %}My Teams · CourtCraft{% endblock %}
+
+{% block fullwidth %}
+  <div class="bg-secondary-navy text-white py-4">
+    <div class="container">
+      <h1 class="h3 mb-0">My Teams</h1>
+      <p class="mb-0 opacity-75">Saved rosters per season (from Assemble Team)</p>
+    </div>
+  </div>
+{% endblock %}
+
+{% block content %}
+  {% if not teams or teams|length == 0 %}
+    <div class="alert alert-info">
+      No teams saved yet. Go to a season and click <strong>Assemble Team</strong> to save your roster.
+    </div>
+  {% else %}
+    <div class="row g-3">
+      {% for t in teams %}
+        {% set season_url = t.season|replace('/','-') %}
+        <div class="col-12">
+          <div class="card shadow-sm">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+              <div class="d-flex align-items-center gap-3">
+                <span class="badge text-bg-primary">{{ t.season }}</span>
+                <span class="text-muted small">Saved: {{ t.created }}</span>
+              </div>
+              <div class="d-flex gap-2">
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('season_page', season=season_url) }}">Open Season</a>
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('team_assemble_page', season=season_url) }}">Assemble Team</a>
+                <a class="btn btn-sm btn-success" href="{{ url_for('board_page', season=season_url) }}">Open Board</a>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="mb-2">
+                <span class="badge rounded-pill text-bg-secondary">{{ t.data_type }}</span>
+              </div>
+              {% if t.players and t.players|length > 0 %}
+                <div class="d-flex flex-wrap gap-2">
+                  {% for p in t.players %}
+                    <span class="badge text-bg-light border">{{ p }}</span>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <p class="text-muted mb-0">No players saved in this roster.</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endblock %}

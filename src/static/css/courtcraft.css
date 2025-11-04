@@ -162,3 +162,9 @@ footer {
   text-align: center;
   padding: 1rem 0;
 }
+
+.brand-logo {
+  height: 28px; width: auto; display: inline-block;
+  vertical-align: middle; object-fit: contain;
+}
+

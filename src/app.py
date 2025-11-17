@@ -229,7 +229,7 @@ def team_assemble_page(season):
         df_f = df[df['Name'].str.lower().isin(clean)]
         results = df_f.to_dict(orient='records')
 
-        exclude = ["Round","Rank","Value","Team","Inj","Pos","m/g","USG","fga/g","g", "p/g","r/g","a/g","s/g","b/g","to/g","3/g","fg%","ft%"]
+        exclude = ["Round","Rank","Value","Team","Inj","Pos","m/g","USG","fga/g", "fta/g","LeagV", "puntV", "g", "p/g","r/g","a/g","s/g","b/g","to/g","3/g","fg%","ft%"]
         for r in results:
             if r.get("g",0) < 40:
                 r["Name"] += Markup(" <span style='color:red;font-weight:bold;'>+</span>")
@@ -244,7 +244,6 @@ def team_assemble_page(season):
         for r in results:
             for k,v in r.items():
                 if isinstance(v,float): r[k] = round(v,2)
-
         val_cols = ["pV","rV","aV","sV","bV","toV","fg%V","ft%V","3V"]
         mins = {c: df_f[c].min() if c in df_f else 0 for c in val_cols}
         maxs = {c: df_f[c].max() if c in df_f else 0 for c in val_cols}

@@ -66,36 +66,69 @@
 
   {% if results %}
     <div class="table-responsive mb-4">
-      <table class="table table-sm align-middle">
+      <table class="table table-striped table-sm">
+        <!-- define fixed column widths to keep headers/data aligned -->
+        <colgroup>
+          <col class="col-name" />
+          <col class="col-stat" /> <!-- pV -->
+          <col class="col-stat" /> <!-- rV -->
+          <col class="col-stat" /> <!-- aV -->
+          <col class="col-stat" /> <!-- sV -->
+          <col class="col-stat" /> <!-- bV -->
+          <col class="col-stat" /> <!-- toV -->
+          <col class="col-stat" /> <!-- fg%V -->
+          <col class="col-stat" /> <!-- ft%V -->
+          <col class="col-stat" /> <!-- 3V -->
+        </colgroup>
+
         <thead>
           <tr>
-            {% for k,v in results[0].items() %}
-              {% if not k.endswith('_style') %}
-                <th>{{ k }}</th>
-              {% endif %}
-            {% endfor %}
+            <th>Name</th>
+            <th>pV</th>
+            <th>rV</th>
+            <th>aV</th>
+            <th>sV</th>
+            <th>bV</th>
+            <th>toV</th>
+            <th>fg%V</th>
+            <th>ft%V</th>
+            <th>3V</th>
           </tr>
         </thead>
+
         <tbody>
-          {% for row in results %}
+          {% for r in results %}
             <tr>
-              {% for k,v in row.items() %}
-                {% if not k.endswith('_style') %}
-                  <td {{ row.get(k ~ '_style','')|safe }}>{{ v|safe }}</td>
-                {% endif %}
-              {% endfor %}
+              <td class="text-truncate" title="{{ r.get('Name','') }}">{{ r.get('Name','')|safe }}</td>
+              <td {{ r.get('pV_style','')|safe }}>{{ r.get('pV','') }}</td>
+              <td {{ r.get('rV_style','')|safe }}>{{ r.get('rV','') }}</td>
+              <td {{ r.get('aV_style','')|safe }}>{{ r.get('aV','') }}</td>
+              <td {{ r.get('sV_style','')|safe }}>{{ r.get('sV','') }}</td>
+              <td {{ r.get('bV_style','')|safe }}>{{ r.get('bV','') }}</td>
+              <td {{ r.get('toV_style','')|safe }}>{{ r.get('toV','') }}</td>
+              <td {{ r.get('fg%V_style','')|safe }}>{{ r.get('fg%V','') }}</td>
+              <td {{ r.get('ft%V_style','')|safe }}>{{ r.get('ft%V','') }}</td>
+              <td {{ r.get('3V_style','')|safe }}>{{ r.get('3V','') }}</td>
             </tr>
           {% endfor %}
-          {% if totals %}
-            <tr class="table-light">
-              {% for k,v in totals.items() %}
-                {% if not k.endswith('_style') %}
-                  <td {{ totals.get(k ~ '_style','')|safe }}><strong>{{ v }}</strong></td>
-                {% endif %}
-              {% endfor %}
-            </tr>
-          {% endif %}
         </tbody>
+
+        {% if totals %}
+          <tfoot>
+            <tr class="table-total table-primary">
+              <td><strong>{{ totals.get('Name','Total') }}</strong></td>
+              <td {{ totals.get('pV_style','')|safe }}><strong>{{ totals.get('pV','') }}</strong></td>
+              <td {{ totals.get('rV_style','')|safe }}><strong>{{ totals.get('rV','') }}</strong></td>
+              <td {{ totals.get('aV_style','')|safe }}><strong>{{ totals.get('aV','') }}</strong></td>
+              <td {{ totals.get('sV_style','')|safe }}><strong>{{ totals.get('sV','') }}</strong></td>
+              <td {{ totals.get('bV_style','')|safe }}><strong>{{ totals.get('bV','') }}</strong></td>
+              <td {{ totals.get('toV_style','')|safe }}><strong>{{ totals.get('toV','') }}</strong></td>
+              <td {{ totals.get('fg%V_style','')|safe }}><strong>{{ totals.get('fg%V','') }}</strong></td>
+              <td {{ totals.get('ft%V_style','')|safe }}><strong>{{ totals.get('ft%V','') }}</strong></td>
+              <td {{ totals.get('3V_style','')|safe }}><strong>{{ totals.get('3V','') }}</strong></td>
+            </tr>
+          </tfoot>
+        {% endif %}
       </table>
     </div>
   {% endif %}

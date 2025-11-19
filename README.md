@@ -1,93 +1,115 @@
+// ...existing code...
 # CourtCraft 🏀 — NBA Fantasy Calculator
 
-A Flask + Bootstrap web app to explore NBA season stats, build fantasy teams, and compare lineups.
-This repository contains a small SQLite-backed Flask server and a responsive UI styled with Bootstrap 5.
+A small Flask + Bootstrap web app to explore NBA season stats, build fantasy teams, compare lineups, and get draft board recommendations. The app reads curated Excel rankings (multiple scoring variants), stores simple user rosters in SQLite, and exposes autocomplete and recommendation endpoints used by the UI.
 
-> _This README was auto-polished on 2025-10-29 12:52 UTC._
+> This README was updated to reflect the code tree and routes present in [src/app.py](src/app.py).
 
-## ✨ Features
-- Browse by season, with curated labels (e.g., **2022/23 NBA Season**)
-- Assemble teams and compare them across stats
-- Autocomplete helpers for player search
-- Simple auth endpoints (register/login/logout) with SQLite
-- Clean Bootstrap 5 layout with a custom `courtcraft.css` theme
+## Quick links
+- App main: [src/app.py](src/app.py)
+- Local parser / helper: [src/BasicParser.py](src/BasicParser.py)
+- Templates: [src/templates/](src/templates/)
+  - [base.html](src/templates/base.html), [home.html](src/templates/home.html), [season.html](src/templates/season.html), [team_assemble.html](src/templates/team_assemble.html), [compare_teams.html](src/templates/compare_teams.html), [board.html](src/templates/board.html), [teams.html](src/templates/teams.html), [auth.html](src/templates/auth.html)
+- Static CSS: [src/static/css/courtcraft.css](src/static/css/courtcraft.css)
+- Requirements: [requirements.txt](requirements.txt)
 
-## 🧰 Tech Stack
-- **Backend:** Flask, SQLite (via Python stdlib)
-- **Frontend:** Jinja templates, Bootstrap 5
-- **Data:** pandas for CSV/Excel loading and transformations
+## Features
+- Browse seasons and view stats pages.
+- Assemble and save rosters (13 active + up to 2 IR) per season.
+- Autocomplete for player names backed by season Excel files.
+- Draft board UI: mark taken players, seed from saved team, calculate recommendations.
+- Simple auth and per-user saved rosters stored in SQLite (`src/users.db`).
 
-## 🚀 Quickstart
+## Routes (handlers in [src/app.py](src/app.py))
+- `/` — [`home`](src/app.py)
+- `/season/<season>` — [`season_page`](src/app.py)
+- `/season/<season>/data` — [`season_data_page`](src/app.py)
+- `/season/<season>/team` (GET, POST) — [`team_assemble_page`](src/app.py)
+- `/season/<season>/compare` (GET, POST) — [`compare_teams`](src/app.py)
+- `/season/<season>/board` — board UI rendered by [`board_page`](src/app.py)
+- `/season/<season>/board/recommend` (POST) — recommendation API [`board_recommend`](src/app.py)
+- `/players/<season>` — returns canonical player names for a season [`load_all_player_names`](src/app.py)
+- `/autocomplete/<season>` — autocomplete endpoint [`autocomplete`](src/app.py)
+- `/auth`, `/register`, `/login`, `/logout` — auth endpoints (`register`, `login`, `logout` in [src/app.py](src/app.py))
+- `/teams` — list saved teams for current user [`list_teams`](src/app.py)
+
+## Project structure
+```
+README.md
+requirements.txt
+src/
+  app.py
+  BasicParser.py
+  Nopunts/        # expected location for .xls/.xlsx datasets (nopunt scoring)
+  Tovpunts/       # expected location for .xls/.xlsx datasets (tovpunt scoring)
+  static/
+    css/
+      courtcraft.css
+    img/
+  templates/
+    base.html
+    home.html
+    season.html
+    team_assemble.html
+    compare_teams.html
+    board.html
+    teams.html
+    auth.html
+```
+
+## Quickstart (local dev)
+1. Create and activate a virtualenv
 ```bash
-# 1) Create a virtual env (recommended)
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+# mac/linux
+source .venv/bin/activate
+# windows
+.venv\Scripts\activate
+```
 
-# 2) Install deps
+2. Install deps
+```bash
 pip install -r requirements.txt
-
-# 3) Configure environment (optional)
-cp .env.example .env  # then edit SECRET_KEY
-
-# 4) Run the app
-flask --app NBAFantasyCalculator/src/app.py --debug run
-# Or:
-python NBAFantasyCalculator/src/app.py
 ```
 
-## 🗂️ Project Structure
-```
-NBAFantasyCalculator/
-├─ NBAFantasyCalculator/
-│  ├─ src/
-│  │  ├─ app.py
-│  │  ├─ templates/
-│  │  │  ├─ base.html
-│  │  │  ├─ home.html
-│  │  │  ├─ season.html
-│  │  │  ├─ team_assemble.html
-│  │  │  ├─ compare_teams.html
-│  │  │  └─ auth.html
-│  │  └─ static/
-│  │     └─ css/courtcraft.css
-└─ README.md
+3. Run the app
+```bash
+# Option A (recommended for dev)
+python src/app.py
+
+# Option B (Flask CLI)
+# from project root:
+flask --app src/app.py --debug run
 ```
 
-## 🌐 Routes
-| Route Decorator | Handler |
-|---|---|
-| `"/"` | `home` |
-| `"/season/<season>"` | `season_page` |
-| `"/season/<season>/data"` | `season_data_page` |
-| `"/season/<season>/team", methods=["GET","POST"]` | `team_assemble_page` |
-| `"/season/<season>/compare", methods=["GET","POST"]` | `compare_teams` |
-| `"/auth"` | `auth` |
-| `"/register", methods=["POST"]` | `register` |
-| `"/login", methods=["POST"]` | `login` |
-| `"/logout"` | `logout` |
-| `"/teams"` | `list_teams` |
-| `"/autocomplete/<season>"` | `autocomplete` |
+## Configuration & data
+- SQLite DB: `src/users.db` created automatically by [`init_db`](src/app.py).
+- Excel datasets: filenames and locations are configured in `data_dirs` / `data_files` inside [src/app.py](src/app.py). Example folders: `src/Nopunts/` and `src/Tovpunts/`. The code reads XLS/XLSX via `_read_excel_safe` in [src/app.py](src/app.py).
+- Allowed upload extensions: `.xls`, `.xlsx`. The safe reader picks engines (xlrd for .xls, openpyxl for .xlsx).
 
-Common pages include:
-- `/` — Home
-- `/season/<season>` — Season page
-- `/season/<season>/team` — Team assembly
-- `/season/<season>/compare` — Team comparison
-- `/auth` — Auth page
+## Data ingestion / expected columns
+- Rankings spreadsheets should include a `Name` column. App expects value columns like `pV`, `rV`, `aV`, `sV`, `bV`, `toV`, `fg%V`, `ft%V`, `3V` in the datasets used for scoring and recommendations.
+- If you supply a custom Excel when assembling a team, it will be read temporarily and used for calculations.
 
-## ⚙️ Configuration
-- **Database:** `users.db` in `src/` is created automatically (SQLite).
-- **Environment:** `.env` file is supported (via `python-dotenv`) for local dev.
+## Key implementation notes
+- Player name union loader: [`load_all_player_names`](src/app.py) merges names from both nopunts/tovpunt datasets for validation/autocomplete.
+- Safe Excel reader: `_read_excel_safe` in [src/app.py](src/app.py) returns None on missing files or reader errors and selects engines by extension.
+- Recommendation logic: [`board_recommend`](src/app.py) loads the best available dataset, builds candidate scores using weighted value columns, respects 8-cat scoring (ignores turnovers) and user punts.
+- DB helpers: [`get_db`](src/app.py), [`init_db`](src/app.py), and [`load_latest_team`](src/app.py) manage user/team persistence.
 
-## 🧪 Data Ingestion
-- pandas is used to load and process CSV/XLS files. Place sample data under a data folder (e.g., `NBAFantasyCalculator/data/`) and adjust the file paths in `app.py` if needed.
+## Troubleshooting
+- If pages complain about reading datasets, ensure `xlrd` (for .xls) and `openpyxl` (for .xlsx) are installed in your environment.
+- Ensure the expected Excel files are present under `src/Nopunts/` and `src/Tovpunts/` (filenames are defined in `data_files` in [src/app.py](src/app.py)).
+- Console / server logs will show exceptions for failed reads; the UI surfaces friendly flash messages.
 
-## 📸 Screenshots
-Add a few screenshots or GIFs here to showcase the flows.
+## Development tips
+- UI templates are in `src/templates/`. The board UI is [src/templates/board.html](src/templates/board.html) and uses a small client-side localStorage state for taken players and a POST to `/season/<season>/board/recommend` to get suggestions.
+- For a quick test of the parser, see [src/BasicParser.py](src/BasicParser.py).
 
-## 🛡️ Notes
-- Do not commit real secrets. Keep `.env` local.
-- For production, consider gunicorn/uvicorn behind a reverse proxy, and a proper database.
+## License & notes
+- Do not commit real secrets. Replace `app.secret_key` in [src/app.py](src/app.py) with a secure value for production or use a `.env`.
+- For production, serve via a WSGI server (gunicorn, uWSGI) behind a reverse proxy and use a proper DB.
 
----
 Happy hacking!
+{ changed code }
+// ...existing code...

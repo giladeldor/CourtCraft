@@ -3,6 +3,7 @@ import itertools
 import sqlite3
 import json
 import pandas as pd
+import traceback
 from flask import (
     Flask, render_template, request, jsonify,
     session, flash, redirect, url_for
@@ -503,10 +504,15 @@ def board_recommend(season):
 # -----------------------------------------------------------------------------
 @app.route("/season/<season>/board", endpoint="board_page")
 def board_page(season):
-    team_players = []; team_data_type = "nopunts"
-    if session.get("user_id"):
-        team_players, team_data_type = load_latest_team(session["user_id"], season)
-    return render_template("board.html", season=season, team_players=team_players, team_data_type=team_data_type)
+    try:
+        team_players = []; team_data_type = "nopunts"
+        if session.get("user_id"):
+            team_players, team_data_type = load_latest_team(session["user_id"], season)
+        return render_template("board.html", season=season, team_players=team_players, team_data_type=team_data_type)
+    except Exception:
+        traceback.print_exc()
+        flash("Internal server error while preparing the board page.", "danger")
+        return render_template("board.html", season=season, team_players=[], team_data_type="nopunts")
 
 if __name__ == "__main__":
     app.run(debug=True)

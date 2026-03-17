@@ -12,6 +12,7 @@ from datetime import datetime
     # markupsafe is used for tiny HTML markers in table cells
 from markupsafe import Markup
 from werkzeug.security import generate_password_hash, check_password_hash
+from sync_bbm_rankings import sync_nopunt_xlsx
 
 app = Flask(__name__)
 app.secret_key = "your-secret-key"  # replace with a secure random key
@@ -29,22 +30,33 @@ def get_db():
 def init_db():
     db = get_db()
     db.execute("""
-      CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL
-      );
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL
+        );
     """)
     db.execute("""
-      CREATE TABLE IF NOT EXISTS teams (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        season TEXT NOT NULL,
-        players TEXT NOT NULL,
-        data_type TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        FOREIGN KEY(user_id) REFERENCES users(id)
-      );
+        CREATE TABLE IF NOT EXISTS teams (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            season TEXT NOT NULL,
+            players TEXT NOT NULL,
+            data_type TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        );
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS league_teams (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            season TEXT NOT NULL,
+            team_name TEXT NOT NULL,
+            players TEXT NOT NULL,
+            ir_players TEXT NOT NULL,
+            data_type TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
     """)
     db.commit()
     db.close()
@@ -63,7 +75,7 @@ def inject_globals():
 # -----------------------------------------------------------------------------
 data_dirs = {"nopunts": "Nopunts", "tovpunt": "Tovpunts"}
 data_files = {
-    "25-26": {"nopunts": "BBM_PlayerRankings2526_nopunt.xls"},
+    "25-26": {"nopunts": "BBM_PlayerRankings2526_nopunt.xlsx"},
     "24-25": {"nopunts": "BBM_PlayerRankings2425_nopunt.xls", "tovpunt": "BBM_PlayerRankings2425_tovpunt.xls"},
     "23-24": {"nopunts": "BBM_PlayerRankings2324_nopunt.xls", "tovpunt": "BBM_PlayerRankings2324_tovpunt.xls"},
     "22-23": {"nopunts": "BBM_PlayerRankings2223_nopunt.xls", "tovpunt": "BBM_PlayerRankings2223_tovpunt.xls"},
@@ -110,6 +122,37 @@ def _read_excel_safe(path: str):
     except Exception:
         return None
 
+def _normalize_rankings_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize rankings columns so numeric comparisons/sums are always safe."""
+    out = df.copy()
+    out.columns = [str(c).strip() for c in out.columns]
+
+    if "Name" in out.columns:
+        out["Name"] = out["Name"].astype(str).str.strip()
+
+    # Unify alternate value headers that may appear in exported files.
+    rename_map = {}
+    for c in out.columns:
+        lc = c.lower()
+        if lc in ("leagv", "leaguev"):
+            rename_map[c] = "LeagV"
+        if lc in ("puntv", "puntiv"):
+            rename_map[c] = "puntV"
+    if rename_map:
+        out.rename(columns=rename_map, inplace=True)
+
+    numeric_cols = [
+        "Round", "Rank", "Value", "g", "m/g", "p/g", "3/g", "r/g", "a/g", "s/g", "b/g",
+        "fg%", "fga/g", "ft%", "fta/g", "to/g", "USG",
+        "pV", "3V", "rV", "aV", "sV", "bV", "fg%V", "ft%V", "toV",
+        "LeagV", "puntV"
+    ]
+    for c in numeric_cols:
+        if c in out.columns:
+            out[c] = pd.to_numeric(out[c], errors="coerce")
+
+    return out
+
 # ----- Player name loader (union of nopunts/tovpunt) -----
 def load_all_player_names(season: str):
     names = set()
@@ -144,6 +187,24 @@ def season_page(season):
     formatted = season.replace("-", "/")
     data = season_data.get(season, {})
     return render_template("season.html", season=formatted, season_url=season, **data)
+
+@app.route("/season/<season>/sync-bbm", methods=["POST"])
+def sync_bbm_for_season(season):
+    try:
+        output_dir = os.path.join(os.path.dirname(__file__), data_dirs["nopunts"])
+        out_path = sync_nopunt_xlsx(output_dir=output_dir, season_key=season)
+
+        # Ensure the app points to the freshly synced file for this runtime.
+        out_name = os.path.basename(out_path)
+        if season not in data_files:
+            data_files[season] = {"nopunts": out_name}
+        else:
+            data_files[season]["nopunts"] = out_name
+
+        flash(f"Synced latest BBM rankings: {out_name}", "success")
+    except Exception as e:
+        flash(f"BBM sync failed: {e}", "danger")
+    return redirect(url_for("season_page", season=season))
 
 @app.route("/season/<season>/data")
 def season_data_page(season):
@@ -215,16 +276,8 @@ def team_assemble_page(season):
                 punt_buttons=[], raw_type=raw_type, data_type=data_type
             )
 
-        # Normalize columns and names
-        df.columns = [c.strip() for c in df.columns]
-        df['Name'] = df['Name'].astype(str).str.strip()
-        if data_type=="tovpunt":
-            rename_map = {}
-            for c in df.columns:
-                lc = c.lower()
-                if lc in ("leagv","leaguev"): rename_map[c] = "LeagV"
-                if lc in ("puntv","puntiv"):  rename_map[c] = "puntV"
-            df.rename(columns=rename_map, inplace=True)
+        # Normalize columns and dtypes once to avoid string/int runtime issues.
+        df = _normalize_rankings_df(df)
 
         clean = [n.lower() for n in registered]
         df_f = df[df['Name'].str.lower().isin(clean)]
@@ -232,7 +285,8 @@ def team_assemble_page(season):
 
         exclude = ["Round","Rank","Value","Team","Inj","Pos","m/g","USG","fga/g", "fta/g","LeagV", "puntV", "g", "p/g","r/g","a/g","s/g","b/g","to/g","3/g","fg%","ft%"]
         for r in results:
-            if r.get("g",0) < 40:
+            games = pd.to_numeric(r.get("g", 0), errors="coerce")
+            if pd.notna(games) and games < 40:
                 r["Name"] += Markup(" <span style='color:red;font-weight:bold;'>+</span>")
             for c in exclude: r.pop(c, None)
 
@@ -307,7 +361,7 @@ def compare_teams(season):
                 comparison=None, match_winner=None, teamA_advice=[]
             )
 
-        df['Name'] = df['Name'].astype(str).str.strip()
+        df = _normalize_rankings_df(df)
         val_cols = ["pV","rV","aV","sV","bV","toV","fg%V","ft%V","3V"]
         def sum_stats(roster):
             sub = df[df['Name'].str.lower().isin([n.lower() for n in roster])]
@@ -446,8 +500,7 @@ def _load_df_for_recs(season: str, preferred_type: str):
             continue
         df = _read_excel_safe(path)
         if df is not None and "Name" in df.columns:
-            df.columns = [c.strip() for c in df.columns]
-            df["Name"] = df["Name"].astype(str).str.strip()
+            df = _normalize_rankings_df(df)
             return df, t
     return None, preferred_type or "nopunts"
 
@@ -455,6 +508,147 @@ def _current_totals(df, roster):
     sub = df[df["Name"].str.lower().isin([n.lower() for n in roster])]
     totals = sub[VAL_COLS].sum(numeric_only=True)
     return {c: float(totals.get(c, 0.0)) for c in VAL_COLS}
+
+def _team_quality_label(count_positive: int) -> str:
+    return "bad team" if count_positive < 2 else (
+        "ok team" if count_positive < 3 else (
+            "good team" if count_positive < 4 else "great team"
+        )
+    )
+
+def _load_df_for_exact_type(season: str, data_type: str):
+    try:
+        path = os.path.join(os.path.dirname(__file__), data_dirs[data_type], data_files[season][data_type])
+    except KeyError:
+        return None
+    df = _read_excel_safe(path)
+    if df is None or "Name" not in df.columns:
+        return None
+    return _normalize_rankings_df(df)
+
+def _compute_league_power_rankings(season: str, rows):
+    teams = []
+    for r in rows:
+        try:
+            players = json.loads(r["players"]) or []
+        except Exception:
+            players = []
+        try:
+            ir_players = json.loads(r["ir_players"]) or []
+        except Exception:
+            ir_players = []
+
+        data_type = r["data_type"] if r["data_type"] in ("nopunts", "tovpunt") else "nopunts"
+        df = _load_df_for_exact_type(season, data_type)
+        if df is None:
+            df, data_type = _load_df_for_recs(season, data_type)
+
+        vals = {c: 0.0 for c in VAL_COLS}
+        if df is not None:
+            active = [n for n in players if n and n.strip() and n.lower() not in {x.lower() for x in ir_players}]
+            sub = df[df["Name"].str.lower().isin([n.lower() for n in active])]
+            sums = sub[VAL_COLS].sum(numeric_only=True)
+            vals = {c: float(sums.get(c, 0.0)) for c in VAL_COLS}
+
+        positive = sum(1 for c in VAL_COLS if vals.get(c, 0.0) > 0)
+        power_score = round(sum(vals.get(c, 0.0) for c in VAL_COLS), 3)
+        teams.append({
+            "id": r["id"],
+            "team_name": r["team_name"],
+            "players": players,
+            "ir_players": ir_players,
+            "data_type": data_type,
+            "analysis": _team_quality_label(positive),
+            "positive_cats": positive,
+            "power_score": power_score,
+            "totals": {k: round(v, 2) for k, v in vals.items()},
+            "created_at": r["created_at"],
+        })
+
+    teams.sort(key=lambda t: (t["power_score"], t["positive_cats"]), reverse=True)
+    for idx, t in enumerate(teams, start=1):
+        t["power_rank"] = idx
+    return teams
+
+def _load_league_taken_players(season: str):
+    db = get_db()
+    rows = db.execute("SELECT players, ir_players FROM league_teams WHERE season=?", (season,)).fetchall()
+    names = []
+    seen = set()
+    for r in rows:
+        for col in ("players", "ir_players"):
+            try:
+                arr = json.loads(r[col]) or []
+            except Exception:
+                arr = []
+            for n in arr:
+                name = str(n).strip()
+                key = name.lower()
+                if name and key not in seen:
+                    seen.add(key)
+                    names.append(name)
+    return names
+
+@app.route("/season/<season>/league-teams", methods=["GET", "POST"])
+def league_teams_page(season):
+    formatted = season.replace("-", "/")
+    form_data_type = request.form.get("data_type", "nopunts") if request.method == "POST" else "nopunts"
+
+    if request.method == "POST":
+        action = request.form.get("action", "save")
+        db = get_db()
+
+        if action == "delete":
+            team_id = request.form.get("team_id", "").strip()
+            if team_id.isdigit():
+                db.execute("DELETE FROM league_teams WHERE id=? AND season=?", (int(team_id), season))
+                db.commit()
+                flash("League team removed.", "success")
+            else:
+                flash("Invalid team id.", "warning")
+            return redirect(url_for("league_teams_page", season=season))
+
+        team_name = (request.form.get("team_name") or "").strip()
+        players = [request.form.get(f"player{i}", "").strip() for i in range(1, 14)]
+        players = [p for p in players if p]
+        ir_players = [request.form.get("ir1", "").strip(), request.form.get("ir2", "").strip()]
+        ir_players = [p for p in ir_players if p]
+
+        if not team_name:
+            flash("Please provide a team name.", "warning")
+        elif not players:
+            flash("Please add at least one active player.", "warning")
+        else:
+            db.execute("DELETE FROM league_teams WHERE season=? AND lower(team_name)=lower(?)", (season, team_name))
+            db.execute(
+                "INSERT INTO league_teams(season, team_name, players, ir_players, data_type, created_at) VALUES(?,?,?,?,?,?)",
+                (
+                    season,
+                    team_name,
+                    json.dumps(players),
+                    json.dumps(ir_players),
+                    ("tovpunt" if "tov" in form_data_type else "nopunts"),
+                    datetime.now().isoformat(),
+                ),
+            )
+            db.commit()
+            flash(f"Saved league team: {team_name}", "success")
+            return redirect(url_for("league_teams_page", season=season))
+
+    db = get_db()
+    rows = db.execute(
+        "SELECT id, team_name, players, ir_players, data_type, created_at FROM league_teams WHERE season=? ORDER BY created_at DESC",
+        (season,),
+    ).fetchall()
+    power_rankings = _compute_league_power_rankings(season, rows)
+
+    return render_template(
+        "league_teams.html",
+        season=formatted,
+        season_url=season,
+        data_type=form_data_type,
+        power_rankings=power_rankings,
+    )
 
 def _build_waiver_recommendations(df, roster, free_agents, scoring_mode, scoring_type, punt_labels, limit=12):
     punt_valcols = {CAT_LABEL_TO_VALCOL.get(lbl) for lbl in (punt_labels or [])}
@@ -788,11 +982,18 @@ def board_page(season):
         team_players = []; team_data_type = "nopunts"
         if session.get("user_id"):
             team_players, team_data_type = load_latest_team(session["user_id"], season)
-        return render_template("board.html", season=season, team_players=team_players, team_data_type=team_data_type)
+        league_taken_players = _load_league_taken_players(season)
+        return render_template(
+            "board.html",
+            season=season,
+            team_players=team_players,
+            team_data_type=team_data_type,
+            league_taken_players=league_taken_players,
+        )
     except Exception:
         traceback.print_exc()
         flash("Internal server error while preparing the board page.", "danger")
-        return render_template("board.html", season=season, team_players=[], team_data_type="nopunts")
+        return render_template("board.html", season=season, team_players=[], team_data_type="nopunts", league_taken_players=[])
 
 if __name__ == "__main__":
     app.run(debug=True)

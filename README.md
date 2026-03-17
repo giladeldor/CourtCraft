@@ -91,6 +91,29 @@ flask --app src/app.py --debug run
 - Rankings spreadsheets should include a `Name` column. App expects value columns like `pV`, `rV`, `aV`, `sV`, `bV`, `toV`, `fg%V`, `ft%V`, `3V` in the datasets used for scoring and recommendations.
 - If you supply a custom Excel when assembling a team, it will be read temporarily and used for calculations.
 
+## Live BBM sync (auto-download)
+You can sync the latest Basketball Monster rankings without manually exporting from the browser.
+
+1. Run the sync command:
+```bash
+python src/sync_bbm_rankings.py --season 25-26
+```
+
+2. This downloads from:
+`https://basketballmonster.com/playerrankings.aspx`
+
+3. And writes:
+`src/Nopunts/BBM_PlayerRankings2526_nopunt.xlsx`
+
+The app is configured to use this file for season `25-26`.
+
+### Keep it updated automatically (Windows Task Scheduler)
+Schedule a daily task that runs:
+```bash
+<path-to-python> <project-root>\src\sync_bbm_rankings.py --season 25-26
+```
+This keeps your local rankings file refreshed automatically.
+
 ## Key implementation notes
 - Player name union loader: [`load_all_player_names`](src/app.py) merges names from both nopunts/tovpunt datasets for validation/autocomplete.
 - Safe Excel reader: `_read_excel_safe` in [src/app.py](src/app.py) returns None on missing files or reader errors and selects engines by extension.

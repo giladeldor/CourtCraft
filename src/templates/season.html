@@ -32,11 +32,22 @@
           Trade Analyzer
         </a>
         <a
+          href="{{ url_for('league_teams_page', season=season_url) }}"
+          class="btn btn-lg btn-secondary"
+        >
+          League Teams
+        </a>
+        <a
           href="{{ url_for('waiver_wire_page', season=season_url) }}"
           class="btn btn-lg btn-secondary"
         >
           Waiver Wire
         </a>
+        <form method="post" action="{{ url_for('sync_bbm_for_season', season=season_url) }}">
+          <button type="submit" class="btn btn-lg btn-outline-light w-100">
+            Sync Latest BBM Data
+          </button>
+        </form>
         <!-- 🟡 NEW Board button -->
         <a
           href="{{ url_for('board_page', season=season_url) }}"

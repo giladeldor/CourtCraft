@@ -11,6 +11,12 @@
 {% endblock %}
 
 {% block content %}
+<div id="boardData"
+  data-season="{{ season }}"
+  data-team-players='{{ (team_players or [])|tojson }}'
+  data-league-players='{{ (league_taken_players or [])|tojson }}'
+  data-team-data-type="{{ team_data_type or 'nopunts' }}"
+  class="d-none"></div>
 <div class="row g-4">
 
   <!-- Left: Taken Players -->
@@ -165,9 +171,11 @@ Stephen Curry"></textarea>
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  const season = {{ season|tojson }};
-  const teamPlayers = {{ (team_players or [])|tojson }};
-  const defaultDataType = {{ (team_data_type or "nopunts")|tojson }};
+  const dataNode = document.getElementById('boardData');
+  const season = (dataNode && dataNode.dataset.season) || '';
+  const teamPlayers = JSON.parse((dataNode && dataNode.dataset.teamPlayers) || '[]');
+  const leaguePlayers = JSON.parse((dataNode && dataNode.dataset.leaguePlayers) || '[]');
+  const defaultDataType = (dataNode && dataNode.dataset.teamDataType) || 'nopunts';
   const storageKey = (suffix) => `board:${season}:${suffix}`;
   const el = (id) => document.getElementById(id);
   const showErr = (msg) => { const box = el('jsError'); if (!box) return; box.textContent = msg; box.classList.remove('d-none'); };
@@ -209,16 +217,31 @@ document.addEventListener('DOMContentLoaded', function() {
     }catch{}
   }
 
+  function mergeLeagueTeamsIntoTaken(){
+    if (!loadedNames) return;
+    for (const n of (leaguePlayers || [])) {
+      const lower = (n || '').trim().toLowerCase();
+      const canonical = nameMap.has(lower) ? nameMap.get(lower) : n;
+      if (lower && !takenKeys.has(lower)) {
+        taken.push(canonical);
+        takenKeys.add(lower);
+      }
+    }
+    saveTaken();
+  }
+
   function renderTaken(){
     const list=el('takenList'); const count=el('takenCount'); if(!list||!count) return;
     const map = new Map();
     for (const name of taken){ const k=(name||'').trim().toLowerCase(); if(k && !map.has(k)) map.set(k,name); }
     taken = Array.from(map.values()); takenKeys = new Set(taken.map(s=>(s||'').trim().toLowerCase()));
     list.innerHTML=''; const myTeamSet=new Set((teamPlayers||[]).map(n=>(n||'').trim().toLowerCase()));
+    const leagueSet=new Set((leaguePlayers||[]).map(n=>(n||'').trim().toLowerCase()));
     for (const name of taken){
       const isMine=myTeamSet.has((name||'').trim().toLowerCase());
+      const isLeague=leagueSet.has((name||'').trim().toLowerCase());
       const li=document.createElement('li'); li.className='list-group-item d-flex justify-content-between align-items-center';
-      li.innerHTML=`<div class="d-flex align-items-center gap-2"><span>${name}</span>${isMine?"<span class='badge text-bg-info'>My Team</span>":""}</div>
+      li.innerHTML=`<div class="d-flex align-items-center gap-2"><span>${name}</span>${isMine?"<span class='badge text-bg-info'>My Team</span>":""}${(!isMine&&isLeague)?"<span class='badge text-bg-secondary'>League</span>":""}</div>
         <button class="btn btn-sm btn-outline-danger" data-name="${name.replace(/"/g,'&quot;')}">&times;</button>`;
       list.appendChild(li);
     }
@@ -256,7 +279,10 @@ document.addEventListener('DOMContentLoaded', function() {
       taken=taken.filter(n=>toKey(n)!==k); takenKeys.delete(k); saveTaken(); renderTaken(); });
     clearBtn.addEventListener('click',()=>{ if(!taken.length) return; if(!confirm('Clear all taken players?')) return; taken=[]; takenKeys.clear();
       for (const n of (teamPlayers||[])){ const low=toKey(n); let canon = nameMap.has(low) ? nameMap.get(low) : n;
-        if(low && !takenKeys.has(low)){ taken.push(canon); takenKeys.add(low);} } saveTaken(); renderTaken(); });
+        if(low && !takenKeys.has(low)){ taken.push(canon); takenKeys.add(low);} }
+      for (const n of (leaguePlayers||[])){ const low=toKey(n); let canon = nameMap.has(low) ? nameMap.get(low) : n;
+        if(low && !takenKeys.has(low)){ taken.push(canon); takenKeys.add(low);} }
+      saveTaken(); renderTaken(); });
     pasteBtn.addEventListener('click',()=>{ const lines=(prompt('Paste player names (one per line):','')||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
       for(const n of lines) addName(n); });
   }
@@ -307,6 +333,7 @@ document.addEventListener('DOMContentLoaded', function() {
     await loadValidNames();
     loadTaken();
     seedMyTeamOnce();
+    mergeLeagueTeamsIntoTaken();
     renderTaken();
 
     try { initTakenForm(); } catch(e){ showErr('Add/remove UI failed to initialize.'); console.error(e); }

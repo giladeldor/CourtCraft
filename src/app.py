@@ -456,6 +456,139 @@ def _current_totals(df, roster):
     totals = sub[VAL_COLS].sum(numeric_only=True)
     return {c: float(totals.get(c, 0.0)) for c in VAL_COLS}
 
+def _build_waiver_recommendations(df, roster, free_agents, scoring_mode, scoring_type, punt_labels, limit=12):
+    punt_valcols = {CAT_LABEL_TO_VALCOL.get(lbl) for lbl in (punt_labels or [])}
+    roster_l = {n.lower() for n in roster}
+    fa_l = {n.lower() for n in free_agents}
+
+    # Candidate pool is restricted to the provided free agents list.
+    cand = df[df["Name"].str.lower().isin(fa_l)].copy()
+    cand = cand[~cand["Name"].str.lower().isin(roster_l)]
+    if cand.empty:
+        return [], [], {}
+
+    cols = [c for c in VAL_COLS if c in cand.columns]
+    if not cols:
+        return [], [], {}
+
+    effective_cols = [c for c in cols if not (scoring_type == "8cat" and c == "toV")]
+    totals = _current_totals(df, roster)
+    weak_cols = sorted(
+        [c for c in effective_cols if c not in punt_valcols],
+        key=lambda c: totals.get(c, 0.0)
+    )
+    weak_focus = weak_cols[:3]
+
+    weights = {c: (0.0 if c in punt_valcols else 1.0) for c in effective_cols}
+    for c in weak_focus:
+        if scoring_mode == "short_term":
+            weights[c] = weights.get(c, 0.0) + 1.25
+        else:
+            weights[c] = weights.get(c, 0.0) + 0.65
+
+    # In short-term mode, push counting stats and slightly reduce percentage impact.
+    if scoring_mode == "short_term":
+        for c in ("fg%V", "ft%V"):
+            if c in weights and weights[c] > 0:
+                weights[c] *= 0.8
+
+    cand[effective_cols] = cand[effective_cols].fillna(0.0)
+    scored = []
+    for _, row in cand.iterrows():
+        score = 0.0
+        for c in effective_cols:
+            score += float(row[c]) * weights.get(c, 0.0)
+
+        top_stats = sorted(
+            [(c, float(row[c])) for c in effective_cols if weights.get(c, 0.0) > 0],
+            key=lambda x: x[1],
+            reverse=True
+        )[:3]
+
+        strengths = []
+        for c, v in top_stats:
+            label = next((lbl for lbl, vc in CAT_LABEL_TO_VALCOL.items() if vc == c), c)
+            strengths.append(f"{label}: {round(v, 2)}")
+
+        scored.append({
+            "name": row["Name"],
+            "fit_score": round(score, 3),
+            "strengths": strengths
+        })
+
+    scored.sort(key=lambda x: x["fit_score"], reverse=True)
+
+    col_to_label = {v: k for k, v in CAT_LABEL_TO_VALCOL.items()}
+    weak_labels = [col_to_label.get(c, c) for c in weak_focus]
+    totals_labels = {col_to_label.get(c, c): round(float(totals.get(c, 0.0)), 2) for c in effective_cols}
+    return scored[:limit], weak_labels, totals_labels
+
+@app.route("/season/<season>/waiver", methods=["GET", "POST"])
+def waiver_wire_page(season):
+    formatted = season.replace("-", "/")
+    data_type = "nopunts"
+    scoring_mode = "rest_season"
+    scoring_type = "9cat"
+    free_agents_text = ""
+    punts = []
+    roster_players = []
+    recommendations = []
+    weak_categories = []
+    roster_totals = {}
+
+    if session.get("user_id"):
+        roster_players, data_type = load_latest_team(session["user_id"], season)
+
+    if request.method == "POST":
+        data_type = request.form.get("data_type", data_type or "nopunts")
+        scoring_mode = request.form.get("scoring_mode", "rest_season")
+        scoring_type = request.form.get("scoring_type", "9cat")
+        punts = request.form.getlist("punts")
+        free_agents_text = (request.form.get("free_agents") or "").strip()
+
+        roster_text = (request.form.get("roster_players") or "").strip()
+        if roster_text:
+            roster_players = [n.strip() for n in roster_text.splitlines() if n.strip()]
+
+        free_agents = [n.strip() for n in free_agents_text.splitlines() if n.strip()]
+        if not roster_players:
+            flash("Add your roster players first (one name per line).", "warning")
+        elif not free_agents:
+            flash("Add a free-agent pool (one name per line).", "warning")
+        else:
+            df, _ = _load_df_for_recs(season, data_type)
+            if df is None:
+                flash("Could not read rankings dataset for waiver recommendations.", "danger")
+            else:
+                recommendations, weak_categories, roster_totals = _build_waiver_recommendations(
+                    df=df,
+                    roster=roster_players,
+                    free_agents=free_agents,
+                    scoring_mode=scoring_mode,
+                    scoring_type=scoring_type,
+                    punt_labels=punts,
+                    limit=15 if scoring_mode == "rest_season" else 10
+                )
+                if scoring_type == "8cat":
+                    roster_totals.pop("TO", None)
+                if not recommendations:
+                    flash("No matching free agents found in the selected dataset.", "warning")
+
+    return render_template(
+        "waiver_wire.html",
+        season=formatted,
+        season_url=season,
+        roster_players=roster_players,
+        data_type=data_type,
+        scoring_mode=scoring_mode,
+        scoring_type=scoring_type,
+        punts=punts,
+        free_agents_text=free_agents_text,
+        recommendations=recommendations,
+        weak_categories=weak_categories,
+        roster_totals=roster_totals
+    )
+
 @app.route("/season/<season>/board/recommend", methods=["POST"])
 def board_recommend(season):
     payload = request.get_json(force=True, silent=True) or {}

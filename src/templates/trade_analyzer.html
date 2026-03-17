@@ -1,0 +1,305 @@
+{% extends 'base.html' %}
+{% block title %}Trade Analyzer · {{ season }} · CourtCraft{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">Trade Analyzer</h3>
+  <a href="{{ url_for('season_page', season=season_url) }}" class="btn btn-outline-secondary btn-sm">Back to Season</a>
+</div>
+
+<p class="text-muted">
+  Build the trade by clicking player names. Click a selected name again to remove it.
+</p>
+
+<form method="post" class="mb-4">
+  <textarea name="my_roster" id="my_roster" class="d-none">{{ my_roster_text or '' }}</textarea>
+  <textarea name="opp_roster" id="opp_roster" class="d-none">{{ opp_roster_text or '' }}</textarea>
+  <textarea name="send_players" id="send_players" class="d-none">{{ send_text or '' }}</textarea>
+  <textarea name="receive_players" id="receive_players" class="d-none">{{ receive_text or '' }}</textarea>
+  <datalist id="allPlayers"></datalist>
+
+  <div class="row g-3">
+    <div class="col-12 col-lg-6">
+      <label class="form-label">My Roster</label>
+      <div id="my_roster_selected" class="d-flex flex-wrap gap-2 mb-2"></div>
+      <div class="input-group">
+        <input id="my_roster_input" class="form-control" list="allPlayers" placeholder="Search player and press Add">
+        <button type="button" id="my_roster_add" class="btn btn-outline-primary">Add</button>
+      </div>
+    </div>
+    <div class="col-12 col-lg-6">
+      <label class="form-label">Opponent Roster (optional)</label>
+      <div id="opp_roster_selected" class="d-flex flex-wrap gap-2 mb-2"></div>
+      <div class="input-group">
+        <input id="opp_roster_input" class="form-control" list="allPlayers" placeholder="Search player and press Add">
+        <button type="button" id="opp_roster_add" class="btn btn-outline-primary">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mt-1">
+    <div class="col-12 col-md-6">
+      <label class="form-label">I Send</label>
+      <div id="send_players_selected" class="d-flex flex-wrap gap-2 mb-2"></div>
+      <div class="input-group mb-2">
+        <input id="send_players_input" class="form-control" list="allPlayers" placeholder="Search player and press Add">
+        <button type="button" id="send_players_add" class="btn btn-outline-primary">Add</button>
+      </div>
+      <small class="text-muted d-block mb-1">Quick add from my roster:</small>
+      <div id="send_quick" class="d-flex flex-wrap gap-2"></div>
+    </div>
+    <div class="col-12 col-md-6">
+      <label class="form-label">I Receive</label>
+      <div id="receive_players_selected" class="d-flex flex-wrap gap-2 mb-2"></div>
+      <div class="input-group mb-2">
+        <input id="receive_players_input" class="form-control" list="allPlayers" placeholder="Search player and press Add">
+        <button type="button" id="receive_players_add" class="btn btn-outline-primary">Add</button>
+      </div>
+      <small class="text-muted d-block mb-1">Quick add from opponent roster:</small>
+      <div id="receive_quick" class="d-flex flex-wrap gap-2"></div>
+    </div>
+  </div>
+
+  <div class="row g-3 mt-1">
+    <div class="col-12 col-md-4">
+      <label class="form-label">Dataset</label>
+      <select name="data_type" class="form-select">
+        <option value="nopunts" {% if data_type == 'nopunts' %}selected{% endif %}>No Punts</option>
+        <option value="tovpunt" {% if data_type == 'tovpunt' %}selected{% endif %}>TO Punt</option>
+      </select>
+    </div>
+    <div class="col-12 col-md-4">
+      <label class="form-label">Scoring Type</label>
+      <select name="scoring_type" class="form-select">
+        <option value="9cat" {% if scoring_type == '9cat' %}selected{% endif %}>9-CAT</option>
+        <option value="8cat" {% if scoring_type == '8cat' %}selected{% endif %}>8-CAT (ignore TO)</option>
+      </select>
+    </div>
+    <div class="col-12 col-md-4 d-flex align-items-end">
+      <button type="submit" class="btn btn-primary w-100">Analyze Trade</button>
+    </div>
+  </div>
+
+  <div class="mt-3">
+    <label class="form-label d-block mb-2">Punt Categories (optional)</label>
+    {% set all_cats = ['PTS', 'REB', 'AST', 'STL', 'BLK', 'TO', 'FG%', 'FT%', '3PM'] %}
+    {% for c in all_cats %}
+      <div class="form-check form-check-inline">
+        <input class="form-check-input" type="checkbox" name="punts" value="{{ c }}" id="trade_punt_{{ c|replace('%','pct') }}" {% if c in (punts or []) %}checked{% endif %}>
+        <label class="form-check-label" for="trade_punt_{{ c|replace('%','pct') }}">{{ c }}</label>
+      </div>
+    {% endfor %}
+  </div>
+</form>
+
+{% if missing_names and missing_names|length > 0 %}
+  <div class="alert alert-warning">
+    Some names were not found in the selected dataset: <strong>{{ missing_names|join(', ') }}</strong>
+  </div>
+{% endif %}
+
+{% if verdict %}
+  <div class="alert alert-info">
+    <div><strong>Verdict:</strong> {{ verdict.overall }}</div>
+    <div class="mt-1">Improved: {{ verdict.improved }} | Declined: {{ verdict.declined }} | Neutral: {{ verdict.neutral }}</div>
+    {% if verdict.top_gains and verdict.top_gains|length > 0 %}
+      <div class="mt-1">Top gains: {{ verdict.top_gains | map(attribute='cat') | join(', ') }}</div>
+    {% endif %}
+    {% if verdict.top_losses and verdict.top_losses|length > 0 %}
+      <div class="mt-1">Top losses: {{ verdict.top_losses | map(attribute='cat') | join(', ') }}</div>
+    {% endif %}
+  </div>
+{% endif %}
+
+{% if my_result %}
+  <h5 class="mb-2">Your Side</h5>
+  <div class="table-responsive mb-4">
+    <table class="table table-striped table-sm align-middle">
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Before</th>
+          <th>After</th>
+          <th>Delta</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c, before_v in my_result.before.items() %}
+          {% set after_v = my_result.after.get(c, 0) %}
+          {% set d = my_result.delta.get(c, 0) %}
+          <tr>
+            <td>{{ c }}</td>
+            <td>{{ before_v }}</td>
+            <td>{{ after_v }}</td>
+            <td>
+              {% if d > 0 %}
+                <span class="text-success">+{{ d }}</span>
+              {% elif d < 0 %}
+                <span class="text-danger">{{ d }}</span>
+              {% else %}
+                <span class="text-muted">0.0</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+
+{% if opp_result %}
+  <h5 class="mb-2">Opponent Side</h5>
+  <div class="table-responsive">
+    <table class="table table-striped table-sm align-middle">
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Before</th>
+          <th>After</th>
+          <th>Delta</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c, before_v in opp_result.before.items() %}
+          {% set after_v = opp_result.after.get(c, 0) %}
+          {% set d = opp_result.delta.get(c, 0) %}
+          <tr>
+            <td>{{ c }}</td>
+            <td>{{ before_v }}</td>
+            <td>{{ after_v }}</td>
+            <td>
+              {% if d > 0 %}
+                <span class="text-success">+{{ d }}</span>
+              {% elif d < 0 %}
+                <span class="text-danger">{{ d }}</span>
+              {% else %}
+                <span class="text-muted">0.0</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+  const season = '{{ season_url }}';
+
+  const parseLines = (txt) => (txt || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const uniq = (arr) => {
+    const seen = new Set();
+    const out = [];
+    for (const n of arr) {
+      const key = n.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push(n);
+      }
+    }
+    return out;
+  };
+
+  const state = {
+    my_roster: uniq(parseLines(document.getElementById('my_roster').value)),
+    opp_roster: uniq(parseLines(document.getElementById('opp_roster').value)),
+    send_players: uniq(parseLines(document.getElementById('send_players').value)),
+    receive_players: uniq(parseLines(document.getElementById('receive_players').value)),
+  };
+
+  let validNames = [];
+  try {
+    const res = await fetch(`/players/${season}`);
+    const data = await res.json();
+    validNames = data.names || [];
+  } catch (e) {
+    validNames = [];
+  }
+  const dl = document.getElementById('allPlayers');
+  dl.innerHTML = validNames.map(n => `<option value="${n}"></option>`).join('');
+
+  const syncHidden = (key) => {
+    document.getElementById(key).value = state[key].join('\n');
+  };
+
+  const toggleName = (key, name) => {
+    const idx = state[key].findIndex(n => n.toLowerCase() === name.toLowerCase());
+    if (idx >= 0) state[key].splice(idx, 1);
+    else state[key].push(name);
+    syncHidden(key);
+    renderAll();
+  };
+
+  const addName = (key, inputId) => {
+    const input = document.getElementById(inputId);
+    const value = (input.value || '').trim();
+    if (!value) return;
+    if (!state[key].some(n => n.toLowerCase() === value.toLowerCase())) {
+      state[key].push(value);
+      syncHidden(key);
+      renderAll();
+    }
+    input.value = '';
+  };
+
+  const renderSelected = (key, selectedId, styleClass) => {
+    const wrap = document.getElementById(selectedId);
+    wrap.innerHTML = '';
+    for (const name of state[key]) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `btn btn-sm ${styleClass}`;
+      btn.textContent = name;
+      btn.title = 'Click to remove';
+      btn.addEventListener('click', () => toggleName(key, name));
+      wrap.appendChild(btn);
+    }
+  };
+
+  const renderQuick = (sourceKey, targetKey, wrapId) => {
+    const wrap = document.getElementById(wrapId);
+    wrap.innerHTML = '';
+    for (const name of state[sourceKey]) {
+      const selected = state[targetKey].some(n => n.toLowerCase() === name.toLowerCase());
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `btn btn-sm ${selected ? 'btn-success' : 'btn-outline-secondary'}`;
+      btn.textContent = name;
+      btn.title = selected ? 'Selected' : 'Click to add';
+      btn.addEventListener('click', () => toggleName(targetKey, name));
+      wrap.appendChild(btn);
+    }
+  };
+
+  const bindAdd = (key, inputId, addId) => {
+    document.getElementById(addId).addEventListener('click', () => addName(key, inputId));
+    document.getElementById(inputId).addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addName(key, inputId); }
+    });
+  };
+
+  const renderAll = () => {
+    renderSelected('my_roster', 'my_roster_selected', 'btn-outline-success');
+    renderSelected('opp_roster', 'opp_roster_selected', 'btn-outline-secondary');
+    renderSelected('send_players', 'send_players_selected', 'btn-outline-danger');
+    renderSelected('receive_players', 'receive_players_selected', 'btn-outline-primary');
+    renderQuick('my_roster', 'send_players', 'send_quick');
+    renderQuick('opp_roster', 'receive_players', 'receive_quick');
+  };
+
+  bindAdd('my_roster', 'my_roster_input', 'my_roster_add');
+  bindAdd('opp_roster', 'opp_roster_input', 'opp_roster_add');
+  bindAdd('send_players', 'send_players_input', 'send_players_add');
+  bindAdd('receive_players', 'receive_players_input', 'receive_players_add');
+
+  syncHidden('my_roster');
+  syncHidden('opp_roster');
+  syncHidden('send_players');
+  syncHidden('receive_players');
+  renderAll();
+});
+</script>
+{% endblock %}

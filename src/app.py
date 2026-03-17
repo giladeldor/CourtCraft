@@ -523,6 +523,153 @@ def _build_waiver_recommendations(df, roster, free_agents, scoring_mode, scoring
     totals_labels = {col_to_label.get(c, c): round(float(totals.get(c, 0.0)), 2) for c in effective_cols}
     return scored[:limit], weak_labels, totals_labels
 
+def _totals_for_players(df, players, cols):
+    if not players:
+        return {c: 0.0 for c in cols}
+    subset = df[df["Name"].str.lower().isin({n.lower() for n in players})]
+    sums = subset[cols].sum(numeric_only=True)
+    return {c: float(sums.get(c, 0.0)) for c in cols}
+
+def _analyze_trade_side(df, roster, send_players, receive_players, cols):
+    before = _totals_for_players(df, roster, cols)
+
+    send_l = {n.lower() for n in send_players}
+    base_after = [p for p in roster if p.lower() not in send_l]
+    existing = {p.lower() for p in base_after}
+    for p in receive_players:
+        if p.lower() not in existing:
+            base_after.append(p)
+            existing.add(p.lower())
+
+    after = _totals_for_players(df, base_after, cols)
+    delta = {c: round(after[c] - before[c], 2) for c in cols}
+    return {
+        "before": {c: round(before[c], 2) for c in cols},
+        "after": {c: round(after[c], 2) for c in cols},
+        "delta": delta,
+        "roster_after": base_after,
+    }
+
+@app.route("/season/<season>/trade", methods=["GET", "POST"])
+def trade_analyzer_page(season):
+    formatted = season.replace("-", "/")
+    my_roster = []
+    opp_roster = []
+    send_players = []
+    receive_players = []
+
+    data_type = "nopunts"
+    scoring_type = "9cat"
+    punts = []
+
+    my_roster_text = ""
+    opp_roster_text = ""
+    send_text = ""
+    receive_text = ""
+
+    my_result = None
+    opp_result = None
+    verdict = None
+    missing_names = []
+
+    if session.get("user_id"):
+        my_roster, data_type = load_latest_team(session["user_id"], season)
+        my_roster_text = "\n".join(my_roster)
+
+    if request.method == "POST":
+        data_type = request.form.get("data_type", data_type or "nopunts")
+        scoring_type = request.form.get("scoring_type", "9cat")
+        punts = request.form.getlist("punts")
+
+        my_roster_text = (request.form.get("my_roster") or "").strip()
+        opp_roster_text = (request.form.get("opp_roster") or "").strip()
+        send_text = (request.form.get("send_players") or "").strip()
+        receive_text = (request.form.get("receive_players") or "").strip()
+
+        my_roster = [n.strip() for n in my_roster_text.splitlines() if n.strip()]
+        opp_roster = [n.strip() for n in opp_roster_text.splitlines() if n.strip()]
+        send_players = [n.strip() for n in send_text.splitlines() if n.strip()]
+        receive_players = [n.strip() for n in receive_text.splitlines() if n.strip()]
+
+        if not my_roster:
+            flash("Add your roster first (one name per line).", "warning")
+        elif not send_players and not receive_players:
+            flash("Add at least one player to send or receive.", "warning")
+        else:
+            df, _ = _load_df_for_recs(season, data_type)
+            if df is None:
+                flash("Could not read rankings dataset for trade analysis.", "danger")
+            else:
+                cols = [c for c in VAL_COLS if c in df.columns]
+                if scoring_type == "8cat" and "toV" in cols:
+                    cols = [c for c in cols if c != "toV"]
+
+                punt_valcols = {CAT_LABEL_TO_VALCOL.get(lbl) for lbl in punts}
+                eval_cols = [c for c in cols if c not in punt_valcols]
+
+                all_names = {n.lower() for n in df["Name"].dropna().astype(str).str.strip().unique()}
+                for n in set(my_roster + opp_roster + send_players + receive_players):
+                    if n.lower() not in all_names:
+                        missing_names.append(n)
+
+                my_result = _analyze_trade_side(df, my_roster, send_players, receive_players, cols)
+                if opp_roster:
+                    opp_result = _analyze_trade_side(df, opp_roster, receive_players, send_players, cols)
+
+                improved = sum(1 for c in eval_cols if my_result["delta"].get(c, 0.0) > 0)
+                declined = sum(1 for c in eval_cols if my_result["delta"].get(c, 0.0) < 0)
+                neutral = max(len(eval_cols) - improved - declined, 0)
+
+                if improved > declined:
+                    overall = "Good for your build"
+                elif declined > improved:
+                    overall = "Likely negative for your build"
+                else:
+                    overall = "Close to neutral"
+
+                col_to_label = {v: k for k, v in CAT_LABEL_TO_VALCOL.items()}
+                top_gains = sorted(
+                    [(c, my_result["delta"].get(c, 0.0)) for c in eval_cols],
+                    key=lambda x: x[1],
+                    reverse=True
+                )[:3]
+                top_losses = sorted(
+                    [(c, my_result["delta"].get(c, 0.0)) for c in eval_cols],
+                    key=lambda x: x[1]
+                )[:3]
+
+                verdict = {
+                    "overall": overall,
+                    "improved": improved,
+                    "declined": declined,
+                    "neutral": neutral,
+                    "top_gains": [
+                        {"cat": col_to_label.get(c, c), "delta": round(v, 2)}
+                        for c, v in top_gains if v > 0
+                    ],
+                    "top_losses": [
+                        {"cat": col_to_label.get(c, c), "delta": round(v, 2)}
+                        for c, v in top_losses if v < 0
+                    ]
+                }
+
+    return render_template(
+        "trade_analyzer.html",
+        season=formatted,
+        season_url=season,
+        my_roster_text=my_roster_text,
+        opp_roster_text=opp_roster_text,
+        send_text=send_text,
+        receive_text=receive_text,
+        data_type=data_type,
+        scoring_type=scoring_type,
+        punts=punts,
+        my_result=my_result,
+        opp_result=opp_result,
+        verdict=verdict,
+        missing_names=sorted(set(missing_names), key=lambda s: s.lower())
+    )
+
 @app.route("/season/<season>/waiver", methods=["GET", "POST"])
 def waiver_wire_page(season):
     formatted = season.replace("-", "/")

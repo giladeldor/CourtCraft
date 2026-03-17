@@ -8,18 +8,30 @@
 </div>
 
 <p class="text-muted">
-  Add your roster and free-agent pool to get pickup suggestions based on weak categories.
+  Build your lists by clicking player buttons. Click a selected name again to remove it.
 </p>
 
 <form method="post" class="mb-4">
+  <textarea name="roster_players" id="roster_players" class="d-none">{{ (roster_players or [])|join('\n') }}</textarea>
+  <textarea name="free_agents" id="free_agents" class="d-none">{{ free_agents_text or '' }}</textarea>
+  <datalist id="allPlayers"></datalist>
+
   <div class="row g-3">
     <div class="col-12 col-lg-6">
-      <label class="form-label">Your Roster (one name per line)</label>
-      <textarea name="roster_players" class="form-control" rows="10" placeholder="Nikola Jokic&#10;Tyrese Haliburton&#10;...">{{ (roster_players or [])|join('\n') }}</textarea>
+      <label class="form-label">Your Roster</label>
+      <div id="roster_selected" class="d-flex flex-wrap gap-2 mb-2"></div>
+      <div class="input-group">
+        <input id="roster_input" class="form-control" list="allPlayers" placeholder="Search player and press Add">
+        <button type="button" id="roster_add" class="btn btn-outline-primary">Add</button>
+      </div>
     </div>
     <div class="col-12 col-lg-6">
-      <label class="form-label">Free-Agent Pool (one name per line)</label>
-      <textarea name="free_agents" class="form-control" rows="10" placeholder="Player A&#10;Player B&#10;...">{{ free_agents_text or '' }}</textarea>
+      <label class="form-label">Free-Agent Pool</label>
+      <div id="free_agents_selected" class="d-flex flex-wrap gap-2 mb-2"></div>
+      <div class="input-group">
+        <input id="free_agents_input" class="form-control" list="allPlayers" placeholder="Search player and press Add">
+        <button type="button" id="free_agents_add" class="btn btn-outline-primary">Add</button>
+      </div>
     </div>
   </div>
 
@@ -105,4 +117,96 @@
     </table>
   </div>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+  const season = '{{ season_url }}';
+
+  const parseLines = (txt) => (txt || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const uniq = (arr) => {
+    const seen = new Set();
+    const out = [];
+    for (const n of arr) {
+      const key = n.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push(n);
+      }
+    }
+    return out;
+  };
+
+  const state = {
+    roster: uniq(parseLines(document.getElementById('roster_players').value)),
+    free_agents: uniq(parseLines(document.getElementById('free_agents').value)),
+  };
+
+  let validNames = [];
+  try {
+    const res = await fetch(`/players/${season}`);
+    const data = await res.json();
+    validNames = data.names || [];
+  } catch (e) {
+    validNames = [];
+  }
+
+  const dl = document.getElementById('allPlayers');
+  dl.innerHTML = validNames.map(n => `<option value="${n}"></option>`).join('');
+
+  const syncHidden = (key) => {
+    document.getElementById(key).value = state[key].join('\n');
+  };
+
+  const renderList = (key, selectedId, styleClass) => {
+    const wrap = document.getElementById(selectedId);
+    wrap.innerHTML = '';
+    for (const name of state[key]) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `btn btn-sm ${styleClass}`;
+      btn.textContent = name;
+      btn.title = 'Click to remove';
+      btn.addEventListener('click', () => {
+        state[key] = state[key].filter(n => n.toLowerCase() !== name.toLowerCase());
+        syncHidden(key);
+        renderAll();
+      });
+      wrap.appendChild(btn);
+    }
+  };
+
+  const addName = (key, inputId) => {
+    const input = document.getElementById(inputId);
+    const value = (input.value || '').trim();
+    if (!value) return;
+    const exists = state[key].some(n => n.toLowerCase() === value.toLowerCase());
+    if (!exists) {
+      state[key].push(value);
+      syncHidden(key);
+      renderAll();
+    }
+    input.value = '';
+  };
+
+  const renderAll = () => {
+    renderList('roster', 'roster_selected', 'btn-outline-success');
+    renderList('free_agents', 'free_agents_selected', 'btn-outline-secondary');
+  };
+
+  document.getElementById('roster_add').addEventListener('click', () => addName('roster', 'roster_input'));
+  document.getElementById('free_agents_add').addEventListener('click', () => addName('free_agents', 'free_agents_input'));
+  document.getElementById('roster_input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addName('roster', 'roster_input'); }
+  });
+  document.getElementById('free_agents_input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addName('free_agents', 'free_agents_input'); }
+  });
+
+  syncHidden('roster');
+  syncHidden('free_agents');
+  renderAll();
+});
+</script>
 {% endblock %}

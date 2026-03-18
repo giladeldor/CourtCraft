@@ -1,126 +1,120 @@
 # CourtCraft - NBA Fantasy Calculator
 
-CourtCraft is a Flask web app for category-based NBA fantasy basketball.
-It helps you build and evaluate your team, compare matchups, run draft board recommendations, and manage your private league context.
+![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-Web%20App-000000?logo=flask&logoColor=white)
+![Status](https://img.shields.io/badge/Status-Active%20Development-2EA44F)
 
-## What It Does
+CourtCraft is a category-based NBA fantasy companion app built with Flask.
+It helps you assemble rosters, compare team strengths, evaluate trades, and run draft recommendations in a clean browser UI.
 
-- Account system (register/login/logout)
-- Assemble Team (13 active + up to 2 IR)
-- Persisted team storage per user + season
-- Team quality analysis based on category value columns
-- Compare Teams head-to-head
-- Trade Analyzer with category delta and verdict
-- Draft Board with live recommendations
-- League Teams manager with Power Rankings
-- Basketball Monster sync for latest rankings
-- Optional player mini-headshots (auto-fetched; no local image pack required)
+## Highlights
 
-## Recent Changes
+- Multi-user auth flow (register, login, logout)
+- Assemble Team with 13 active spots and up to 2 IR slots
+- Team persistence by user and season
+- Team-vs-team comparison across category value columns
+- Trade Analyzer with per-category impact and verdict summary
+- Draft Board recommendations with punt-aware logic
+- League Teams management with Power Rankings
+- Optional mini player headshots (auto-fetched with fallback)
 
-### Added / Improved
+## Product Behavior
 
-- Per-user League Teams isolation:
-  - Guests see an empty League Teams page
-  - Logged-in users only see their own league teams
-  - Board "taken players" now only includes the logged-in user's league teams
-- Assemble Team integration into League Power Rankings:
-  - Latest saved Assemble Team roster is included as a special "My Team" row in power rankings
-- Performance:
-  - Rankings dataframes are cached in-memory by file mtime to reduce repeated Excel parsing
-- UI/UX:
-  - Bright basketball theme and colorful action tiles
-  - Compact season action cards
-- Player photos:
-  - Automatic best-effort headshot URL generation
-  - Falls back to generated avatars when a headshot is unavailable
+- Logged-out users:
+  - League Teams is intentionally empty
+  - Board starts empty and does not persist another user's taken list
+- Logged-in users:
+  - Can only see and edit their own League Teams
+  - Board taken-player context is scoped to their own league data
+- Latest Assemble Team roster is included as a special My Team row in League Power Rankings
 
-### Removed
-
-- Waiver Wire feature removed (route + UI)
-- Stats Leaders feature removed from season flow
-  - Old `/season/<season>/data` now redirects back to season page with an info flash
-
-## Stack
+## Tech Stack
 
 - Python 3.12+
-- Flask
+- Flask + Jinja2
 - pandas
 - SQLite
-- Bootstrap + Jinja templates
+- Bootstrap 5
 
-## Project Structure
+## Project Layout
 
-- `src/app.py` - main Flask app and business logic
-- `src/templates/` - Jinja templates
-- `src/static/css/courtcraft.css` - app styling
-- `src/sync_bbm_rankings.py` - BBM sync script
-- `src/Nopunts/` - nopunt ranking files
-- `src/Tovpunts/` - tovpunt ranking files
-- `src/users.db` - SQLite database (created/updated automatically)
+- `src/app.py`: main Flask app, routes, scoring logic, ownership rules
+- `src/templates/`: Jinja templates
+- `src/static/css/courtcraft.css`: app styling
+- `src/sync_bbm_rankings.py`: Basketball Monster sync helper
+- `src/Nopunts/`: non-punt ranking files
+- `src/Tovpunts/`: punt/tov ranking files
 
-## Setup
+## Quick Start
 
-1. Create virtual environment
+1. Create a virtual environment.
 
 ```bash
 python -m venv .venv
 ```
 
-2. Activate environment
+2. Activate it.
 
-Windows PowerShell:
-
-```bash
+```powershell
 .venv\Scripts\Activate.ps1
 ```
 
-3. Install dependencies
+3. Install dependencies.
 
 ```bash
 pip install -r requirements.txt
 ```
 
-4. Run app
+4. Configure environment variables (optional but recommended).
+
+```bash
+copy .env.example .env
+```
+
+5. Run the app.
 
 ```bash
 python src/app.py
 ```
 
-App runs at:
+Default URL: `http://127.0.0.1:5000`
 
-- `http://127.0.0.1:5000`
+## Environment Variables
 
-## Data Files
+Set these for safer local/public demos:
 
-Configured in `src/app.py` via `data_files` and `data_dirs`.
-The app supports `.xls` and `.xlsx`, with safe reader fallback logic.
+- `FLASK_SECRET_KEY`: session secret key
+- `FLASK_DEBUG`: `1` for debug mode, `0` for off
+- `FLASK_HOST`: default `127.0.0.1`
+- `FLASK_PORT`: default `5000`
 
-## Basketball Monster Sync
+## Rankings Sync
 
-Sync latest rankings into runtime file:
+Pull latest rankings into runtime files:
 
 ```bash
 python src/sync_bbm_rankings.py --season 25-26
 ```
 
-Behavior:
+Sync flow:
 
-- Forces "All Players" mode
-- Validates expected row volume
-- Writes both:
-  - main export file
-  - runtime copy (used by app to avoid Excel lock issues)
+- Forces All Players mode
+- Validates row volume
+- Writes export and runtime copy
 
-## Auth + Data Ownership
+## Privacy and Shareability
 
-- Teams in `teams` are always per-user
-- League teams in `league_teams` are now per-user
-- If not logged in:
-  - League Teams view is intentionally empty
-  - League team management is disabled
+- Local database files are git-ignored
+- Personal runtime data should never be committed
+- No personal file paths are required in source
 
-## Notes
+## LinkedIn Share Blurb
 
-- This is a dev server (`debug=True`) and not meant for production deployment as-is.
-- Replace `app.secret_key` in `src/app.py` before production use.
+Built CourtCraft, a Flask-based NBA fantasy analytics app with user-scoped league management, trade impact analysis, and draft recommendation logic. Focused on practical UX, data ownership boundaries, and fast rankings workflows for season prep.
+
+## Roadmap Ideas
+
+- Dockerized one-command run
+- Public demo deployment
+- Test suite coverage for roster and ranking logic
+- CSV export for rankings and matchup reports

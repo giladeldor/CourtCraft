@@ -18,7 +18,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from sync_bbm_rankings import sync_nopunt_xlsx
 
 app = Flask(__name__)
-app.secret_key = "your-secret-key"  # replace with a secure random key
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-me")
 
 # -----------------------------------------------------------------------------
 # DB
@@ -1120,4 +1120,8 @@ def board_page(season):
         return render_template("board.html", season=season, team_players=[], team_data_type="nopunts", league_taken_players=[])
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(
+        debug=(os.getenv("FLASK_DEBUG", "0") == "1"),
+        host=os.getenv("FLASK_HOST", "127.0.0.1"),
+        port=int(os.getenv("FLASK_PORT", "5000")),
+    )

@@ -2,7 +2,7 @@
 {% block title %}Assemble Team · {{ season }} · CourtCraft{% endblock %}
 
 {% block content %}
-<form method="post" enctype="multipart/form-data" class="mt-3">
+<form method="post" enctype="multipart/form-data" class="mt-3" data-season-url="{{ season_url }}">
   <input type="hidden" name="data_type" value="{{ raw_type or 'nopunts' }}"/>
 
   <datalist id="allPlayers"></datalist>
@@ -167,7 +167,9 @@
 <script>
 document.addEventListener('DOMContentLoaded', async function() {
   // Fill the datalist with official names for this season (for browser autocomplete)
-  const season = {{ season_url|tojson }};
+  const form = document.querySelector('form[data-season-url]');
+  const season = form ? form.dataset.seasonUrl : '';
+  if (!season) return;
   try {
     const res = await fetch(`/players/${season}`);
     const data = await res.json();

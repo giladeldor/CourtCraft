@@ -2,14 +2,19 @@
 {% block title %}Home – CourtCraft{% endblock %}
 
 {% block fullwidth %}
-  <!-- Hero (full-bleed parquet) -->
-  <div class="hero">
-    <h1>Welcome to CourtCraft</h1>
-    <p class="lead">Craft your perfect fantasy lineup—powered by real NBA stats.</p>
+  <div class="hero hero-basketball">
+    <div class="hero-overlay"></div>
+    <div class="hero-content">
+      <p class="hero-kicker">Fantasy HQ</p>
+      <h1>Welcome to CourtCraft</h1>
+      <p class="lead">Draft sharper. Trade smarter. Win categories like a playoff series.</p>
+    </div>
   </div>
 
-  <!-- Seasons carousel (full-bleed) -->
   <div class="carousel-wrapper">
+    <div class="season-panel">
+      <h5 class="mb-3 text-uppercase">Choose Your Season</h5>
+      <p class="small mb-3">Jump into rankings, team analysis, trade tools, and your live board.</p>
     <div 
       id="seasonCarousel" 
       class="carousel slide" 
@@ -22,9 +27,10 @@
           <div class="carousel-item {% if loop.first %}active{% endif %}">
             <a 
               href="{{ url_for('season_page', season=s|replace('/', '-')) }}" 
-              class="btn btn-lg btn-outline-warning text-uppercase"
+              class="season-tile season-color-{{ (loop.index0 % 4) + 1 }}"
             >
-              {{ s }}
+              <span class="season-tile-year">{{ s }}</span>
+              <span class="season-tile-desc">Open this season hub for board prep, team analysis, waivers, and trades.</span>
             </a>
           </div>
         {% endfor %}
@@ -45,6 +51,7 @@
       >
         <span class="carousel-control-next-icon"></span>
       </button>
+    </div>
     </div>
   </div>
 {% endblock %}

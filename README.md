@@ -99,6 +99,12 @@ You can sync the latest Basketball Monster rankings without manually exporting f
 python src/sync_bbm_rankings.py --season 25-26
 ```
 
+The sync script triggers Basketball Monster's `All Players` filter automatically (not `Only Top Players`) and validates that the dataset is large enough before saving.
+
+It now writes two files:
+- `BBM_PlayerRankings<YY><YY>_nopunt.xlsx` (main export)
+- `BBM_PlayerRankings<YY><YY>_nopunt_runtime.xlsx` (app runtime copy to avoid file-lock issues when the main file is open in Excel)
+
 2. This downloads from:
 `https://basketballmonster.com/playerrankings.aspx`
 

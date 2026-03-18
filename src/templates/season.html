@@ -4,56 +4,64 @@
 {% block fullwidth %}
   <div class="season-hero d-flex align-items-center">
     <div class="container text-center">
-      <h2 class="display-4 mb-4 text-white">{{ title }}</h2>
+      <p class="hero-kicker mb-2">Game Plan</p>
+      <h2 class="display-4 mb-4">{{ title }}</h2>
 
-      <div class="d-grid gap-2 col-md-6 mx-auto">
+      <div class="d-grid gap-2 col-md-8 mx-auto season-actions">
         <a
           href="{{ url_for('season_data_page', season=season_url) }}"
-          class="btn btn-lg btn-primary"
+          class="season-action-tile action-color-1"
         >
-          View Stats Leaders
+          <span class="season-action-title">View Stats Leaders</span>
+          <span class="season-action-desc">Explore player rankings, category values, and season-wide leaders.</span>
         </a>
         <a
           href="{{ url_for('team_assemble_page', season=season_url) }}"
-          class="btn btn-lg btn-secondary"
+          class="season-action-tile action-color-2"
         >
-          Assemble Team
+          <span class="season-action-title">Assemble Team</span>
+          <span class="season-action-desc">Build your roster, set IR players, and calculate category strengths.</span>
         </a>
         <a
           href="{{ url_for('compare_teams', season=season_url) }}"
-          class="btn btn-lg btn-secondary"
+          class="season-action-tile action-color-3"
         >
-          Compare Teams
+          <span class="season-action-title">Compare Teams</span>
+          <span class="season-action-desc">Run head-to-head category comparisons between two full rosters.</span>
         </a>
         <a
           href="{{ url_for('trade_analyzer_page', season=season_url) }}"
-          class="btn btn-lg btn-secondary"
+          class="season-action-tile action-color-4"
         >
-          Trade Analyzer
+          <span class="season-action-title">Trade Analyzer</span>
+          <span class="season-action-desc">Test trade offers and see who gains or loses in each category.</span>
         </a>
         <a
           href="{{ url_for('league_teams_page', season=season_url) }}"
-          class="btn btn-lg btn-secondary"
+          class="season-action-tile action-color-5"
         >
-          League Teams
+          <span class="season-action-title">League Teams</span>
+          <span class="season-action-desc">Track league rosters and power rankings to map your competition.</span>
         </a>
         <a
           href="{{ url_for('waiver_wire_page', season=season_url) }}"
-          class="btn btn-lg btn-secondary"
+          class="season-action-tile action-color-6"
         >
-          Waiver Wire
+          <span class="season-action-title">Waiver Wire</span>
+          <span class="season-action-desc">Find free-agent pickups that best fit your team needs.</span>
         </a>
         <form method="post" action="{{ url_for('sync_bbm_for_season', season=season_url) }}">
-          <button type="submit" class="btn btn-lg btn-outline-light w-100">
-            Sync Latest BBM Data
+          <button type="submit" class="season-action-tile action-color-7 w-100">
+            <span class="season-action-title">Sync Latest BBM Data</span>
+            <span class="season-action-desc">Refresh rankings from Basketball Monster with one click.</span>
           </button>
         </form>
-        <!-- 🟡 NEW Board button -->
         <a
           href="{{ url_for('board_page', season=season_url) }}"
-          class="btn btn-lg btn-warning"
+          class="season-action-tile action-color-8"
         >
-          Board
+          <span class="season-action-title">Board</span>
+          <span class="season-action-desc">Run your draft board, mark picks, and get live recommendations.</span>
         </a>
       </div>
     </div>

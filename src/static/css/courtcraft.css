@@ -1,96 +1,185 @@
 :root {
-  --primary-orange: #F15A24;
-  --secondary-navy: #1B1464;
-  --accent-white: #FFFFFF;
+  --court-ink: #1f2a44;
+  --court-deep: #2b3e62;
+  --court-orange: #f05a28;
+  --court-gold: #f5b448;
+  --court-light: #fff8eb;
+  --court-wood: #d89e64;
+  --accent-white: #ffffff;
 }
 
 html, body {
   margin: 0;
   padding: 0;
   width: 100%;
-  height: 100%;
+  min-height: 100%;
 }
 
-/* BODY GETS THE COURT BACKGROUND */
 body {
   display: flex;
   flex-direction: column;
-  background: url('../img/court-bg.jpg') no-repeat center center fixed;
-  background-size: cover;
-  font-family: 'Segoe UI', sans-serif;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(245, 180, 72, 0.24), transparent 42%),
+    radial-gradient(circle at 84% 8%, rgba(240, 90, 40, 0.17), transparent 36%),
+    linear-gradient(140deg, #fff6e3 0%, #ffe9c6 54%, #ffe0b2 100%);
+  color: #1f2a44;
+  font-family: 'Barlow', sans-serif;
 }
 
-/* NAVBAR */
+h1, h2, h3, h4, h5, .navbar-brand span {
+  font-family: 'Bebas Neue', sans-serif;
+  letter-spacing: 0.04em;
+}
+
 .navbar {
-  background-color: var(--secondary-navy) !important;
-}
-.navbar-brand span,
-.navbar .nav-link {
-  color: var(--accent-white) !important;
+  background: linear-gradient(90deg, #fffaf0, #ffe7c2) !important;
+  border-bottom: 2px solid rgba(221, 146, 74, 0.55);
+  box-shadow: 0 8px 24px rgba(123, 76, 34, 0.16);
 }
 
-/* HERO (transparent now, letting body bg show through) */
+.navbar .nav-link,
+.navbar-brand span {
+  color: #1f2a44 !important;
+}
+
+.navbar .nav-link:hover {
+  color: #ca5a2b !important;
+}
+
+main.container {
+  flex: 1;
+}
+
+.alert {
+  border-radius: 14px;
+  border: none;
+}
+
+.card {
+  border-radius: 18px;
+  border: 1px solid rgba(192, 133, 71, 0.22);
+  background: linear-gradient(170deg, rgba(255,255,255,0.98), rgba(255,250,242,0.96));
+  box-shadow: 0 12px 28px rgba(114, 67, 30, 0.16);
+}
+
+.card-header {
+  border-bottom: 1px solid rgba(14, 28, 47, 0.08);
+  background: rgba(255, 255, 255, 0.85);
+  color: #132947;
+}
+
+.btn {
+  border-radius: 14px;
+  font-weight: 600;
+}
+
+.btn-primary {
+  background: linear-gradient(120deg, #f05a28, #e57b2f);
+  border: none;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(120deg, #d84d20, #d96d22);
+}
+
+.btn-secondary {
+  background: linear-gradient(120deg, #35527a, #4e6b95);
+  border: none;
+}
+
+.btn-secondary:hover {
+  background: linear-gradient(120deg, #2c4669, #425c81);
+}
+
+.btn-warning {
+  background: linear-gradient(120deg, #f6b221, #f2c356);
+  border: none;
+  color: #1a2236;
+}
+
+.btn-outline-light {
+  border-color: rgba(255, 255, 255, 0.7);
+  color: #fff;
+}
+
+.btn-outline-light:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
 .hero {
   width: 100vw;
-  height: 60vh;
-  /* remove its own bg so you see the body background */
-  background: transparent;
-  color: white;
+  min-height: 56vh;
+  position: relative;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
   align-items: center;
-  text-shadow: 1px 1px 2px rgba(0,0,0,0.6);
+  justify-content: center;
   text-align: center;
+  overflow: hidden;
 }
 
-/* SEASON CAROUSEL WRAPPER (also transparent) */
+.hero-basketball {
+  background:
+    linear-gradient(120deg, rgba(255, 250, 241, 0.86), rgba(255, 234, 198, 0.68)),
+    url('../img/court-bg.jpg') center/cover no-repeat;
+}
+
+.hero-overlay {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 85%, rgba(240, 90, 40, 0.2), transparent 44%),
+    linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,240,213,0.28));
+}
+
+.hero-content {
+  position: relative;
+  z-index: 2;
+  max-width: 760px;
+  padding: 1rem;
+  animation: court-fade-up .5s ease-out;
+}
+
+.hero h1 {
+  color: #1f2a44;
+  font-size: clamp(2.5rem, 6vw, 4.8rem);
+  text-shadow: 0 3px 12px rgba(255, 255, 255, 0.45);
+}
+
+.hero .lead {
+  color: #324769;
+  max-width: 620px;
+  margin: 0 auto;
+}
+
+.hero-kicker {
+  color: #ce5f2f;
+  font-family: 'Barlow', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
 .carousel-wrapper {
   width: 100vw;
-  min-height: 40vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  /* remove its own bg too */
-  background: transparent;
-  padding: 1rem 0;
-  position: relative;
+  padding: 1.6rem 0 2.2rem;
 }
 
-/* -------------------------------------------------------------------
-   Season page “hero” — full-width parquet background with centered content
-   ------------------------------------------------------------------- */
-.season-hero {
-  width: 100vw;
-  background: url('../img/court-bg.jpg') no-repeat center/cover;
-  background-size: cover;
-  /* make it at least tall enough, adjust as desired */
-  min-height: 60vh;
+.season-panel {
+  width: min(760px, 90vw);
+  margin: 0 auto;
+  padding: 1.1rem 1.2rem 1.4rem;
+  border-radius: 20px;
+  border: 1px solid rgba(192, 133, 71, 0.25);
+  background: linear-gradient(160deg, rgba(255, 253, 248, 0.92), rgba(255, 241, 214, 0.86));
+  box-shadow: 0 10px 26px rgba(131, 81, 39, 0.16);
+  color: #273758;
 }
 
-/* Text styling inside hero */
-.season-hero .season-title {
-  font-size: 2.5rem;
-  color: var(--secondary-navy);
-}
-.season-hero .season-desc {
-  font-size: 1.1rem;
-  color: var(--accent-white);
-  text-shadow: 1px 1px 2px rgba(0,0,0,0.6);
+.season-panel h5,
+.season-panel p {
+  color: #273758;
 }
 
-/* Ensure .season-hero’s flex alignment holds on small viewports */
-@media (max-width: 767px) {
-  .season-hero {
-    align-items: flex-start;  /* so mobile padding shows */
-  }
-}
-
-/* -------------------------------------------------------------------
-   Season page carousel
-   ------------------------------------------------------------------- */
-
-/* BOOTSTRAP CAROUSEL OVERRIDES */
 #seasonCarousel {
   width: 100%;
   overflow: visible;
@@ -112,81 +201,157 @@ body {
   display: flex;
 }
 
-/* shrink controls so button stays centered */
-#seasonCarousel .carousel-control-prev,
-#seasonCarousel .carousel-control-next {
-  width: 5%;
-}
-
-/* BUTTON STYLES */
-.btn-primary {
-  background-color: var(--primary-orange);
-  border-color: var(--primary-orange);
-}
-.btn-primary:hover {
-  background-color: #d14b1f;
-  border-color: #d14b1f;
-}
-
-.btn-outline-warning {
-  border-color: var(--primary-orange);
-  color: var(--primary-orange) !important;
-}
-.btn-outline-warning:hover {
-  background-color: var(--primary-orange);
-  color: var(--accent-white) !important;
-}
-
-/* HEADINGS */
-h1, h2, h3, h4, h5 {
-  color: var(--secondary-navy);
-}
-
-/* MAIN + CONTENT CONTAINERS */
-main {
-  flex: 1;
+.season-tile {
+  width: min(560px, 78vw);
+  min-height: 132px;
+  border-radius: 18px;
+  padding: 1rem 1.1rem;
   display: flex;
   flex-direction: column;
-}
-.container {
-  flex: 1;
-  /* make sure containers are transparent too */
-  background: transparent;
-  padding-top: 0;  /* if you had extra spacing */
+  justify-content: center;
+  align-items: flex-start;
+  text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  box-shadow: 0 10px 26px rgba(99, 57, 23, 0.2);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
-/* FOOTER */
-footer {
-  background-color: var(--secondary-navy);
-  color: var(--accent-white);
-  text-align: center;
-  padding: 1rem 0;
+.season-tile:hover {
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 16px 30px rgba(99, 57, 23, 0.24);
 }
+
+.season-tile-year {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(1.9rem, 4vw, 2.5rem);
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: #17263f;
+}
+
+.season-tile-desc {
+  margin-top: 0.55rem;
+  font-size: 0.95rem;
+  line-height: 1.35;
+  color: #22375a;
+  max-width: 46ch;
+}
+
+.season-color-1 {
+  background: linear-gradient(135deg, #ffe29f, #ffbe7d);
+}
+
+.season-color-2 {
+  background: linear-gradient(135deg, #ffd4bf, #ffb6cf);
+}
+
+.season-color-3 {
+  background: linear-gradient(135deg, #cfeaff, #a9ddf7);
+}
+
+.season-color-4 {
+  background: linear-gradient(135deg, #d9f8ce, #bde9c2);
+}
+
+#seasonCarousel .carousel-control-prev,
+#seasonCarousel .carousel-control-next {
+  width: 9%;
+}
+
+#seasonCarousel .carousel-control-prev-icon,
+#seasonCarousel .carousel-control-next-icon {
+  filter: invert(24%) sepia(11%) saturate(1786%) hue-rotate(182deg) brightness(92%) contrast(86%);
+}
+
+.season-hero {
+  width: 100vw;
+  min-height: 70vh;
+  background:
+    linear-gradient(145deg, rgba(255, 248, 234, 0.88), rgba(255, 228, 189, 0.72)),
+    url('../img/court-bg.jpg') center/cover no-repeat;
+}
+
+.season-hero .display-4 {
+  color: #1f2a44;
+}
+
+.season-actions .btn,
+.season-actions form .btn {
+  backdrop-filter: blur(3px);
+}
+
+.season-action-tile {
+  width: 100%;
+  min-height: 88px;
+  border-radius: 16px;
+  padding: 0.66rem 0.82rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  text-align: left;
+  text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  box-shadow: 0 10px 24px rgba(95, 58, 24, 0.16);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.season-action-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 28px rgba(95, 58, 24, 0.22);
+}
+
+.season-action-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.45rem;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: #17263f;
+}
+
+.season-action-desc {
+  margin-top: 0.24rem;
+  font-size: 0.84rem;
+  line-height: 1.3;
+  color: #263c60;
+  max-width: 48ch;
+}
+
+.action-color-1 { background: linear-gradient(135deg, #ffe2a4, #ffc486); }
+.action-color-2 { background: linear-gradient(135deg, #ffceb3, #ffb8c8); }
+.action-color-3 { background: linear-gradient(135deg, #d1ecff, #abdff8); }
+.action-color-4 { background: linear-gradient(135deg, #d8f8cf, #bdecc4); }
+.action-color-5 { background: linear-gradient(135deg, #ffe9bf, #ffd5a2); }
+.action-color-6 { background: linear-gradient(135deg, #ffd6eb, #ffc2d6); }
+.action-color-7 { background: linear-gradient(135deg, #d9f0ff, #bbddff); }
+.action-color-8 { background: linear-gradient(135deg, #ffe7ab, #ffc978); }
 
 .brand-logo {
-  height: 28px; width: auto; display: inline-block;
-  vertical-align: middle; object-fit: contain;
+  height: 34px;
+  width: auto;
+  display: inline-block;
+  vertical-align: middle;
+  object-fit: contain;
 }
 
-/* Ensure tables always render with table layout (fixes reversed / shifted totals row) */
-.table { 
-  width: 100%; 
-  border-collapse: collapse; 
-  direction: ltr !important; 
-  background: rgba(255,255,255,0.96);
-  box-shadow: 0 1px 0 rgba(0,0,0,0.06);
-  border-radius: 4px;
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  direction: ltr !important;
+  background: rgba(255,255,255,0.97);
+  border-radius: 10px;
   overflow: hidden;
-
-  /* ensure column widths are respected so headers align with data */
   table-layout: fixed;
 }
 
-/* column width helpers (colgroup maps to these) */
-.col-name  { width: 36%; }
-.col-stat  { width: 7.1111%; } /* (100 - 36) / 9 ≈ 7.1111% each */
+.table th {
+  background: #f7f0e6;
+  color: #0f223a;
+}
 
-/* ensure long names don't blow the first column */
+.col-name { width: 36%; }
+.col-stat { width: 7.1111%; }
+
 .table td.text-truncate,
 .table th {
   white-space: nowrap;
@@ -194,11 +359,54 @@ footer {
   text-overflow: ellipsis;
 }
 
-/* Visual style for totals row: match/overlay the table background and separate with a top border */
-.table-total td { 
-  background: rgba(250,250,250,0.95); 
-  font-weight: 600; 
-  border-top: 2px solid rgba(0,0,0,0.06);
-  background-clip: padding-box;
+.table-total td {
+  background: rgba(246, 237, 221, 0.95);
+  font-weight: 700;
+  border-top: 2px solid rgba(0,0,0,0.08);
+}
+
+@keyframes court-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 767px) {
+  .hero {
+    min-height: 50vh;
+    padding-top: 1rem;
+  }
+
+  .season-tile {
+    width: min(520px, 72vw);
+    min-height: 144px;
+    padding: 0.9rem 0.95rem;
+  }
+
+  .season-tile-desc {
+    font-size: 0.9rem;
+  }
+
+  .season-action-tile {
+    min-height: 84px;
+    padding: 0.58rem 0.72rem;
+  }
+
+  .season-action-title {
+    font-size: 1.28rem;
+  }
+
+  .season-action-desc {
+    font-size: 0.8rem;
+  }
+
+  .season-hero {
+    min-height: 62vh;
+  }
 }
 

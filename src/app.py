@@ -2,6 +2,7 @@ import os
 import itertools
 import sqlite3
 import json
+import re
 import pandas as pd
 import traceback
 from flask import (
@@ -42,6 +43,7 @@ def init_db():
             user_id INTEGER NOT NULL,
             season TEXT NOT NULL,
             players TEXT NOT NULL,
+            ir_players TEXT NOT NULL DEFAULT '[]',
             data_type TEXT NOT NULL,
             created_at TEXT NOT NULL,
             FOREIGN KEY(user_id) REFERENCES users(id)
@@ -58,6 +60,12 @@ def init_db():
             created_at TEXT NOT NULL
         );
     """)
+
+    # Lightweight migration for existing DBs created before IR persistence.
+    cols = [r[1] for r in db.execute("PRAGMA table_info(teams)").fetchall()]
+    if "ir_players" not in cols:
+        db.execute("ALTER TABLE teams ADD COLUMN ir_players TEXT NOT NULL DEFAULT '[]'")
+
     db.commit()
     db.close()
 
@@ -75,7 +83,7 @@ def inject_globals():
 # -----------------------------------------------------------------------------
 data_dirs = {"nopunts": "Nopunts", "tovpunt": "Tovpunts"}
 data_files = {
-    "25-26": {"nopunts": "BBM_PlayerRankings2526_nopunt.xlsx"},
+    "25-26": {"nopunts": "BBM_PlayerRankings2526_nopunt_runtime.xlsx"},
     "24-25": {"nopunts": "BBM_PlayerRankings2425_nopunt.xls", "tovpunt": "BBM_PlayerRankings2425_tovpunt.xls"},
     "23-24": {"nopunts": "BBM_PlayerRankings2324_nopunt.xls", "tovpunt": "BBM_PlayerRankings2324_tovpunt.xls"},
     "22-23": {"nopunts": "BBM_PlayerRankings2223_nopunt.xls", "tovpunt": "BBM_PlayerRankings2223_tovpunt.xls"},
@@ -112,15 +120,30 @@ def _read_excel_safe(path: str):
     if not os.path.exists(path):
         return None
     _, ext = os.path.splitext(path.lower())
-    try:
-        if ext == ".xlsx":
-            return pd.read_excel(path, engine="openpyxl")
-        elif ext == ".xls":
-            return pd.read_excel(path, engine="xlrd")
-        else:
-            return pd.read_excel(path)
-    except Exception:
-        return None
+    try_paths = [path]
+
+    # Fallback to sibling extension when one file is missing/locked/unsupported.
+    stem = os.path.splitext(path)[0]
+    if ext == ".xls":
+        xlsx_sibling = stem + ".xlsx"
+        if os.path.exists(xlsx_sibling):
+            try_paths.append(xlsx_sibling)
+    elif ext == ".xlsx":
+        xls_sibling = stem + ".xls"
+        if os.path.exists(xls_sibling):
+            try_paths.append(xls_sibling)
+
+    for candidate in try_paths:
+        _, c_ext = os.path.splitext(candidate.lower())
+        try:
+            if c_ext == ".xlsx":
+                return pd.read_excel(candidate, engine="openpyxl")
+            if c_ext == ".xls":
+                return pd.read_excel(candidate, engine="xlrd")
+            return pd.read_excel(candidate)
+        except Exception:
+            continue
+    return None
 
 def _normalize_rankings_df(df: pd.DataFrame) -> pd.DataFrame:
     """Normalize rankings columns so numeric comparisons/sums are always safe."""
@@ -129,6 +152,8 @@ def _normalize_rankings_df(df: pd.DataFrame) -> pd.DataFrame:
 
     if "Name" in out.columns:
         out["Name"] = out["Name"].astype(str).str.strip()
+        # Basketball Monster export repeats header rows in the table body; drop placeholder names.
+        out = out[~out["Name"].str.lower().isin({"name", "", "nan"})].copy()
 
     # Unify alternate value headers that may appear in exported files.
     rename_map = {}
@@ -150,6 +175,10 @@ def _normalize_rankings_df(df: pd.DataFrame) -> pd.DataFrame:
     for c in numeric_cols:
         if c in out.columns:
             out[c] = pd.to_numeric(out[c], errors="coerce")
+
+    # Remove any residual non-player rows (e.g., repeated headers with no numeric values).
+    if "Rank" in out.columns:
+        out = out[out["Rank"].notna()].copy()
 
     return out
 
@@ -194,7 +223,7 @@ def sync_bbm_for_season(season):
         output_dir = os.path.join(os.path.dirname(__file__), data_dirs["nopunts"])
         out_path = sync_nopunt_xlsx(output_dir=output_dir, season_key=season)
 
-        # Ensure the app points to the freshly synced file for this runtime.
+        # Ensure the app points to the runtime copy (safe when the main file is open in Excel).
         out_name = os.path.basename(out_path)
         if season not in data_files:
             data_files[season] = {"nopunts": out_name}
@@ -224,32 +253,48 @@ def team_assemble_page(season):
     season_url = season
     raw_type = request.form.get("data_type", "nopunts") if request.method=="POST" else "nopunts"
     data_type = "tovpunt" if "tov" in raw_type else "nopunts"
+    ir_players = []
 
     if request.method=="GET" and session.get("user_id"):
         db = get_db()
         row = db.execute(
-            "SELECT players,data_type FROM teams WHERE user_id=? AND season=? ORDER BY created_at DESC LIMIT 1",
+            "SELECT players,ir_players,data_type FROM teams WHERE user_id=? AND season=? ORDER BY created_at DESC LIMIT 1",
             (session["user_id"], season)
         ).fetchone()
         if row:
             registered = json.loads(row["players"]); raw_type = row["data_type"]
             data_type = "tovpunt" if "tov" in raw_type else "nopunts"
+            try:
+                ir_players = json.loads(row["ir_players"]) or []
+            except Exception:
+                ir_players = []
         else:
             registered = []
     else:
         registered = []
 
     results = totals = analysis = None
+    ir_rows = None
     punt_buttons = []
 
     if request.method=="POST":
         registered = [request.form.get(f"player{i}", "").strip()
                       for i in range(1,14) if request.form.get(f"player{i}", "").strip()]
+        ir_players = [request.form.get("ir1", "").strip(), request.form.get("ir2", "").strip()]
+        ir_players = [p for p in ir_players if p]
+
         if session.get("user_id"):
             db = get_db()
             db.execute(
-                "INSERT INTO teams(user_id,season,players,data_type,created_at) VALUES(?,?,?,?,?)",
-                (session["user_id"], season, json.dumps(registered), raw_type, datetime.now().isoformat())
+                "INSERT INTO teams(user_id,season,players,ir_players,data_type,created_at) VALUES(?,?,?,?,?,?)",
+                (
+                    session["user_id"],
+                    season,
+                    json.dumps(registered),
+                    json.dumps(ir_players),
+                    raw_type,
+                    datetime.now().isoformat(),
+                )
             )
             db.commit()
 
@@ -263,8 +308,10 @@ def team_assemble_page(season):
             try: os.remove(tmp_path)
             except Exception: pass
         else:
-            fp = os.path.join(os.path.dirname(__file__), data_dirs[data_type], data_files[season][data_type])
-            df = _read_excel_safe(fp)
+            df, used_type = _load_df_for_recs(season, data_type)
+            if used_type != data_type:
+                data_type = used_type
+                raw_type = used_type
 
         if df is None:
             flash("Could not read the rankings file. Install/upgrade xlrd (for .xls) and openpyxl (for .xlsx).", "danger")
@@ -272,6 +319,7 @@ def team_assemble_page(season):
                 "team_assemble.html",
                 season=formatted, season_url=season,
                 registered_players=registered,
+                ir_players=ir_players, ir_rows=None,
                 results=None, totals=None, analysis=None,
                 punt_buttons=[], raw_type=raw_type, data_type=data_type
             )
@@ -280,7 +328,17 @@ def team_assemble_page(season):
         df = _normalize_rankings_df(df)
 
         clean = [n.lower() for n in registered]
+        ir_clean = {n.lower() for n in ir_players}
+
+        # IR players are tracked separately and excluded from active totals.
+        df_ir = df[df['Name'].str.lower().isin(ir_clean)] if ir_clean else df.iloc[0:0]
+        ir_rows = df_ir.to_dict(orient='records') if not df_ir.empty else []
+        for r in ir_rows:
+            r["Name"] = str(r.get("Name", "")) + Markup(" <span style='color:#946200;font-weight:bold;'>(IR)</span>")
+
         df_f = df[df['Name'].str.lower().isin(clean)]
+        if ir_clean:
+            df_f = df_f[~df_f['Name'].str.lower().isin(ir_clean)]
         results = df_f.to_dict(orient='records')
 
         exclude = ["Round","Rank","Value","Team","Inj","Pos","m/g","USG","fga/g", "fta/g","LeagV", "puntV", "g", "p/g","r/g","a/g","s/g","b/g","to/g","3/g","fg%","ft%"]
@@ -330,6 +388,7 @@ def team_assemble_page(season):
         "team_assemble.html",
         season=formatted, season_url=season,
         registered_players=registered,
+        ir_players=ir_players, ir_rows=ir_rows,
         results=results, totals=totals,
         analysis=analysis, punt_buttons=punt_buttons,
         raw_type=raw_type, data_type=data_type
@@ -593,6 +652,10 @@ def _load_league_taken_players(season: str):
 def league_teams_page(season):
     formatted = season.replace("-", "/")
     form_data_type = request.form.get("data_type", "nopunts") if request.method == "POST" else "nopunts"
+    form_team_name = (request.form.get("team_name") or "").strip() if request.method == "POST" else ""
+    form_players = [request.form.get(f"player{i}", "").strip() for i in range(1, 14)] if request.method == "POST" else [""] * 13
+    form_ir_players = [request.form.get("ir1", "").strip(), request.form.get("ir2", "").strip()] if request.method == "POST" else ["", ""]
+    edit_team_id = (request.form.get("edit_team_id") or "").strip() if request.method == "POST" else (request.args.get("edit") or "").strip()
 
     if request.method == "POST":
         action = request.form.get("action", "save")
@@ -608,32 +671,68 @@ def league_teams_page(season):
                 flash("Invalid team id.", "warning")
             return redirect(url_for("league_teams_page", season=season))
 
-        team_name = (request.form.get("team_name") or "").strip()
-        players = [request.form.get(f"player{i}", "").strip() for i in range(1, 14)]
-        players = [p for p in players if p]
-        ir_players = [request.form.get("ir1", "").strip(), request.form.get("ir2", "").strip()]
-        ir_players = [p for p in ir_players if p]
+        team_name = form_team_name
+        players = [p for p in form_players if p]
+        ir_players = [p for p in form_ir_players if p]
 
         if not team_name:
             flash("Please provide a team name.", "warning")
         elif not players:
             flash("Please add at least one active player.", "warning")
         else:
-            db.execute("DELETE FROM league_teams WHERE season=? AND lower(team_name)=lower(?)", (season, team_name))
-            db.execute(
-                "INSERT INTO league_teams(season, team_name, players, ir_players, data_type, created_at) VALUES(?,?,?,?,?,?)",
-                (
-                    season,
-                    team_name,
-                    json.dumps(players),
-                    json.dumps(ir_players),
-                    ("tovpunt" if "tov" in form_data_type else "nopunts"),
-                    datetime.now().isoformat(),
-                ),
-            )
+            normalized_type = "tovpunt" if "tov" in form_data_type else "nopunts"
+            if edit_team_id.isdigit():
+                db.execute(
+                    "UPDATE league_teams SET team_name=?, players=?, ir_players=?, data_type=?, created_at=? WHERE id=? AND season=?",
+                    (
+                        team_name,
+                        json.dumps(players),
+                        json.dumps(ir_players),
+                        normalized_type,
+                        datetime.now().isoformat(),
+                        int(edit_team_id),
+                        season,
+                    ),
+                )
+                flash(f"Updated league team: {team_name}", "success")
+            else:
+                db.execute("DELETE FROM league_teams WHERE season=? AND lower(team_name)=lower(?)", (season, team_name))
+                db.execute(
+                    "INSERT INTO league_teams(season, team_name, players, ir_players, data_type, created_at) VALUES(?,?,?,?,?,?)",
+                    (
+                        season,
+                        team_name,
+                        json.dumps(players),
+                        json.dumps(ir_players),
+                        normalized_type,
+                        datetime.now().isoformat(),
+                    ),
+                )
+                flash(f"Saved league team: {team_name}", "success")
             db.commit()
-            flash(f"Saved league team: {team_name}", "success")
             return redirect(url_for("league_teams_page", season=season))
+
+    if request.method == "GET" and edit_team_id.isdigit():
+        db = get_db()
+        row = db.execute(
+            "SELECT id, team_name, players, ir_players, data_type FROM league_teams WHERE id=? AND season=?",
+            (int(edit_team_id), season),
+        ).fetchone()
+        if row:
+            form_team_name = row["team_name"]
+            form_data_type = row["data_type"] if row["data_type"] in ("nopunts", "tovpunt") else "nopunts"
+            try:
+                p = json.loads(row["players"]) or []
+            except Exception:
+                p = []
+            try:
+                ir = json.loads(row["ir_players"]) or []
+            except Exception:
+                ir = []
+            form_players = [p[i] if i < len(p) else "" for i in range(13)]
+            form_ir_players = [ir[0] if len(ir) > 0 else "", ir[1] if len(ir) > 1 else ""]
+        else:
+            edit_team_id = ""
 
     db = get_db()
     rows = db.execute(
@@ -647,6 +746,10 @@ def league_teams_page(season):
         season=formatted,
         season_url=season,
         data_type=form_data_type,
+        form_team_name=form_team_name,
+        form_players=form_players,
+        form_ir_players=form_ir_players,
+        edit_team_id=edit_team_id,
         power_rankings=power_rankings,
     )
 
@@ -945,6 +1048,13 @@ def board_recommend(season):
 
     exclude = {n.lower() for n in my_team} | taken
     cand = df[~df["Name"].str.lower().isin(exclude)].copy()
+    cand = cand[~cand["Name"].str.lower().isin({"name", "", "nan"})].copy()
+
+    # Do not recommend players marked with X in INJ (out for season).
+    if "Inj" in cand.columns:
+        inj_series = cand["Inj"].fillna("").astype(str).str.strip().str.upper()
+        cand = cand[~inj_series.str.startswith("X")]
+
     cols = [c for c in VAL_COLS if c in cand.columns]
     if not cols: return jsonify({"recommendations": [], "error": "Value columns not found in dataset."})
     cand[cols] = cand[cols].fillna(0.0)
@@ -962,13 +1072,22 @@ def board_recommend(season):
     for _, row in cand.iterrows():
         contrib = {c: float(row[c]) * weights.get(c, 0.0) for c in effective_cols}
         score = sum(contrib.values())
+        display_name = row["Name"]
+
+        # For injured/suspended players, show games in parentheses when available (e.g., INJ 8g / SUSP 4g).
+        if "Inj" in cand.columns:
+            inj_raw = str(row.get("Inj", "") or "").strip()
+            m = re.search(r"(?:INJ|SUSP)\s*(\d+)\s*g", inj_raw, flags=re.IGNORECASE)
+            if m:
+                display_name = f"{display_name} ({m.group(1)}g)"
+
         top_items = sorted(((c, float(row[c])) for c in effective_cols if weights.get(c,0)>0),
                            key=lambda x: x[1], reverse=True)[:3]
         top_readable = []
         for c, v in top_items:
             label = next((lbl for lbl, vc in CAT_LABEL_TO_VALCOL.items() if vc == c), c)
             top_readable.append({"stat": label, "v": round(v, 2)})
-        scores.append({"Name": row["Name"], "score": round(score, 3), "top": top_readable})
+        scores.append({"Name": display_name, "score": round(score, 3), "top": top_readable})
 
     scores.sort(key=lambda x: x["score"], reverse=True)
     return jsonify({"recommendations": scores[:25], "used_type": used_type})

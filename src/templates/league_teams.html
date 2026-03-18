@@ -93,7 +93,11 @@
                 <td><span class="badge text-bg-dark">#{{ t.power_rank }}</span></td>
                 <td>
                   <div class="fw-semibold">
-                    <a href="{{ url_for('league_teams_page', season=season_url, edit=t.id) }}">{{ t.team_name }}</a>
+                    {% if t.is_my_team %}
+                      {{ t.team_name }} <span class="badge text-bg-primary ms-1">Assemble Team</span>
+                    {% else %}
+                      <a href="{{ url_for('league_teams_page', season=season_url, edit=t.id) }}">{{ t.team_name }}</a>
+                    {% endif %}
                   </div>
                   <div class="small text-muted">{{ t.data_type }}</div>
                 </td>
@@ -101,11 +105,15 @@
                 <td>{{ t.analysis }}</td>
                 <td>{{ t.positive_cats }}/9</td>
                 <td>
-                  <form method="post" class="d-inline">
-                    <input type="hidden" name="action" value="delete" />
-                    <input type="hidden" name="team_id" value="{{ t.id }}" />
-                    <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
-                  </form>
+                  {% if t.is_my_team %}
+                    <span class="text-muted small">Manage in Assemble Team</span>
+                  {% else %}
+                    <form method="post" class="d-inline">
+                      <input type="hidden" name="action" value="delete" />
+                      <input type="hidden" name="team_id" value="{{ t.id }}" />
+                      <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                    </form>
+                  {% endif %}
                 </td>
               </tr>
               <tr>

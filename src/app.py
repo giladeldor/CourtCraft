@@ -671,6 +671,12 @@ def _compute_league_power_rankings(season: str, rows):
 
     teams = []
     for r in rows:
+        is_my_team = False
+        try:
+            is_my_team = bool(r["is_my_team"])
+        except Exception:
+            is_my_team = False
+
         try:
             players = json.loads(r["players"]) or []
         except Exception:
@@ -695,6 +701,7 @@ def _compute_league_power_rankings(season: str, rows):
         teams.append({
             "id": r["id"],
             "team_name": r["team_name"],
+            "is_my_team": is_my_team,
             "players": players,
             "ir_players": ir_players,
             "data_type": data_type,
@@ -816,10 +823,28 @@ def league_teams_page(season):
             edit_team_id = ""
 
     db = get_db()
-    rows = db.execute(
+    rows = list(db.execute(
         "SELECT id, team_name, players, ir_players, data_type, created_at FROM league_teams WHERE season=? ORDER BY created_at DESC",
         (season,),
-    ).fetchall()
+    ).fetchall())
+
+    # Also include the logged-in user's latest Assemble Team roster in rankings.
+    if session.get("user_id"):
+        my_row = db.execute(
+            "SELECT players, ir_players, data_type, created_at FROM teams WHERE user_id=? AND season=? ORDER BY datetime(created_at) DESC LIMIT 1",
+            (session["user_id"], season),
+        ).fetchone()
+        if my_row:
+            rows.append({
+                "id": None,
+                "team_name": f"{session.get('user', 'My Team')} (My Team)",
+                "players": my_row["players"],
+                "ir_players": my_row["ir_players"],
+                "data_type": my_row["data_type"],
+                "created_at": my_row["created_at"],
+                "is_my_team": True,
+            })
+
     power_rankings = _compute_league_power_rankings(season, rows)
 
     return render_template(

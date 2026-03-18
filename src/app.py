@@ -116,6 +116,7 @@ season_data = {
 }
 
 PLAYER_HEADSHOT_CACHE = {}
+RANKINGS_DF_CACHE = {}
 
 def _strip_player_name(name: str) -> str:
     cleaned = re.sub(r"<[^>]*>", "", str(name or ""))
@@ -197,6 +198,26 @@ def _read_excel_safe(path: str):
             continue
     return None
 
+def _read_rankings_cached(path: str):
+    """Read and normalize rankings with a process-level mtime cache."""
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        mtime = os.path.getmtime(path)
+    except Exception:
+        mtime = None
+
+    cached = RANKINGS_DF_CACHE.get(path)
+    if cached and cached.get("mtime") == mtime:
+        return cached["df"].copy()
+
+    df = _read_excel_safe(path)
+    if df is None or "Name" not in df.columns:
+        return None
+    df = _normalize_rankings_df(df)
+    RANKINGS_DF_CACHE[path] = {"mtime": mtime, "df": df}
+    return df.copy()
+
 def _normalize_rankings_df(df: pd.DataFrame) -> pd.DataFrame:
     """Normalize rankings columns so numeric comparisons/sums are always safe."""
     out = df.copy()
@@ -232,41 +253,6 @@ def _normalize_rankings_df(df: pd.DataFrame) -> pd.DataFrame:
     if "Rank" in out.columns:
         out = out[out["Rank"].notna()].copy()
 
-    return out
-
-def _build_stats_leaders(df: pd.DataFrame, limit: int = 15):
-    categories = [
-        ("Points Leaders", "p/g"),
-        ("Rebounds Leaders", "r/g"),
-        ("Assists Leaders", "a/g"),
-        ("Steals Leaders", "s/g"),
-        ("Blocks Leaders", "b/g"),
-        ("Threes Leaders", "3/g"),
-        ("FG% Leaders", "fg%"),
-        ("FT% Leaders", "ft%"),
-        ("Overall Value Leaders", "Value"),
-    ]
-
-    out = {}
-    for title, col in categories:
-        if col not in df.columns:
-            continue
-        keep = [c for c in ["Name", "Team", "Pos", col] if c in df.columns]
-        if "Name" not in keep:
-            continue
-        tmp = df[keep].copy()
-        tmp[col] = pd.to_numeric(tmp[col], errors="coerce")
-        tmp = tmp.dropna(subset=[col]).sort_values(col, ascending=False).head(limit)
-
-        rows = []
-        for _, r in tmp.iterrows():
-            rows.append({
-                "Player": str(r.get("Name", "")).strip(),
-                "Team": str(r.get("Team", "")).strip() if "Team" in tmp.columns else "",
-                "Pos": str(r.get("Pos", "")).strip() if "Pos" in tmp.columns else "",
-                "Value": round(float(r.get(col, 0.0)), 2),
-            })
-        out[title] = rows
     return out
 
 # ----- Player name loader (union of nopunts/tovpunt) -----
@@ -324,12 +310,8 @@ def sync_bbm_for_season(season):
 
 @app.route("/season/<season>/data")
 def season_data_page(season):
-    df, _ = _load_df_for_recs(season, "nopunts")
-    if df is None:
-        flash("Could not read default dataset. Please ensure xlrd/openpyxl are installed (see README).", "danger")
-        return render_template("data_calculation.html", season=season.replace("-", "/"), results={})
-    leaders = _build_stats_leaders(df, limit=15)
-    return render_template("data_calculation.html", season=season.replace("-", "/"), results=leaders)
+    flash("Stats Leaders was removed.", "info")
+    return redirect(url_for("season_page", season=season))
 
 # -----------------------------------------------------------------------------
 # Assemble Team
@@ -646,9 +628,8 @@ def _load_df_for_recs(season: str, preferred_type: str):
             path = os.path.join(os.path.dirname(__file__), data_dirs[t], data_files[season][t])
         except KeyError:
             continue
-        df = _read_excel_safe(path)
-        if df is not None and "Name" in df.columns:
-            df = _normalize_rankings_df(df)
+        df = _read_rankings_cached(path)
+        if df is not None:
             return df, t
     return None, preferred_type or "nopunts"
 
@@ -669,12 +650,25 @@ def _load_df_for_exact_type(season: str, data_type: str):
         path = os.path.join(os.path.dirname(__file__), data_dirs[data_type], data_files[season][data_type])
     except KeyError:
         return None
-    df = _read_excel_safe(path)
-    if df is None or "Name" not in df.columns:
-        return None
-    return _normalize_rankings_df(df)
+    return _read_rankings_cached(path)
 
 def _compute_league_power_rankings(season: str, rows):
+    df_cache = {}
+
+    def _get_df_cached(dtype: str):
+        if dtype in df_cache:
+            return df_cache[dtype], dtype
+
+        df = _load_df_for_exact_type(season, dtype)
+        used_type = dtype
+        if df is None:
+            df, used_type = _load_df_for_recs(season, dtype)
+
+        df_cache[dtype] = df
+        if used_type != dtype:
+            df_cache[used_type] = df
+        return df, used_type
+
     teams = []
     for r in rows:
         try:
@@ -687,9 +681,7 @@ def _compute_league_power_rankings(season: str, rows):
             ir_players = []
 
         data_type = r["data_type"] if r["data_type"] in ("nopunts", "tovpunt") else "nopunts"
-        df = _load_df_for_exact_type(season, data_type)
-        if df is None:
-            df, data_type = _load_df_for_recs(season, data_type)
+        df, data_type = _get_df_cached(data_type)
 
         vals = {c: 0.0 for c in VAL_COLS}
         if df is not None:

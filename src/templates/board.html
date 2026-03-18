@@ -16,6 +16,8 @@
   data-team-players='{{ (team_players or [])|tojson }}'
   data-league-players='{{ (league_taken_players or [])|tojson }}'
   data-team-data-type="{{ team_data_type or 'nopunts' }}"
+  data-is-logged-in="{{ 1 if logged_in_user else 0 }}"
+  data-user-scope="{{ (logged_in_user or 'guest')|string }}"
   class="d-none"></div>
 <div class="row g-4">
 
@@ -176,7 +178,9 @@ document.addEventListener('DOMContentLoaded', function() {
   const teamPlayers = JSON.parse((dataNode && dataNode.dataset.teamPlayers) || '[]');
   const leaguePlayers = JSON.parse((dataNode && dataNode.dataset.leaguePlayers) || '[]');
   const defaultDataType = (dataNode && dataNode.dataset.teamDataType) || 'nopunts';
-  const storageKey = (suffix) => `board:${season}:${suffix}`;
+  const isLoggedIn = ((dataNode && dataNode.dataset.isLoggedIn) || '0') === '1';
+  const userScope = (dataNode && dataNode.dataset.userScope) || 'guest';
+  const storageKey = (suffix) => `board:${season}:${userScope}:${suffix}`;
   const el = (id) => document.getElementById(id);
   const showErr = (msg) => { const box = el('jsError'); if (!box) return; box.textContent = msg; box.classList.remove('d-none'); };
   const hideErr = () => { const box = el('jsError'); if (!box) return; box.classList.add('d-none'); };
@@ -202,8 +206,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // ------- Taken state -------
   let taken = []; let takenKeys = new Set();
-  function loadTaken(){ try{ taken = JSON.parse(localStorage.getItem(storageKey('taken'))) || [] }catch{ taken=[] } takenKeys=new Set(taken.map(s=>(s||'').trim().toLowerCase())); }
-  function saveTaken(){ localStorage.setItem(storageKey('taken'), JSON.stringify(taken)); }
+  function loadTaken(){
+    if (!isLoggedIn) {
+      taken = [];
+      takenKeys = new Set();
+      return;
+    }
+    try{ taken = JSON.parse(localStorage.getItem(storageKey('taken'))) || [] }catch{ taken=[] }
+    takenKeys=new Set(taken.map(s=>(s||'').trim().toLowerCase()));
+  }
+  function saveTaken(){
+    if (!isLoggedIn) return;
+    localStorage.setItem(storageKey('taken'), JSON.stringify(taken));
+  }
   function seedMyTeamOnce(){
     try{
       const seeded = JSON.parse(localStorage.getItem(storageKey('seededMyTeam'))) || false;

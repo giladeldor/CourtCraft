@@ -9,7 +9,13 @@
 
 <p class="text-muted">Create teams in your league with active roster + IR. We compute power ranking using the same team-quality scale.</p>
 
-<form method="post" class="card shadow-sm mb-4">
+{% if not can_manage %}
+  <div class="alert alert-info">
+    Please log in to create and view your League Teams. Guest view is intentionally empty.
+  </div>
+{% endif %}
+
+<form method="post" class="card shadow-sm mb-4" {% if not can_manage %}style="opacity:.65;pointer-events:none;"{% endif %}>
   <div class="card-header fw-semibold">{% if edit_team_id %}Edit League Team{% else %}Add / Update League Team{% endif %}</div>
   <div class="card-body">
     <input type="hidden" name="action" value="save" />

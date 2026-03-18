@@ -1,144 +1,126 @@
-// ...existing code...
-# CourtCraft 🏀 — NBA Fantasy Calculator
+# CourtCraft - NBA Fantasy Calculator
 
-A small Flask + Bootstrap web app to explore NBA season stats, build fantasy teams, compare lineups, and get draft board recommendations. The app reads curated Excel rankings (multiple scoring variants), stores simple user rosters in SQLite, and exposes autocomplete and recommendation endpoints used by the UI.
+CourtCraft is a Flask web app for category-based NBA fantasy basketball.
+It helps you build and evaluate your team, compare matchups, run draft board recommendations, and manage your private league context.
 
-> This README was updated to reflect the code tree and routes present in [src/app.py](src/app.py).
+## What It Does
 
-## Quick links
-- App main: [src/app.py](src/app.py)
-- Local parser / helper: [src/BasicParser.py](src/BasicParser.py)
-- Templates: [src/templates/](src/templates/)
-  - [base.html](src/templates/base.html), [home.html](src/templates/home.html), [season.html](src/templates/season.html), [team_assemble.html](src/templates/team_assemble.html), [compare_teams.html](src/templates/compare_teams.html), [board.html](src/templates/board.html), [teams.html](src/templates/teams.html), [auth.html](src/templates/auth.html)
-- Static CSS: [src/static/css/courtcraft.css](src/static/css/courtcraft.css)
-- Requirements: [requirements.txt](requirements.txt)
+- Account system (register/login/logout)
+- Assemble Team (13 active + up to 2 IR)
+- Persisted team storage per user + season
+- Team quality analysis based on category value columns
+- Compare Teams head-to-head
+- Trade Analyzer with category delta and verdict
+- Draft Board with live recommendations
+- League Teams manager with Power Rankings
+- Basketball Monster sync for latest rankings
+- Optional player mini-headshots (auto-fetched; no local image pack required)
 
-## Features
-- Browse seasons and view stats pages.
-- Assemble and save rosters (13 active + up to 2 IR) per season.
-- Autocomplete for player names backed by season Excel files.
-- Draft board UI: mark taken players, seed from saved team, calculate recommendations.
-- Simple auth and per-user saved rosters stored in SQLite (`src/users.db`).
+## Recent Changes
 
-## Routes (handlers in [src/app.py](src/app.py))
-- `/` — [`home`](src/app.py)
-- `/season/<season>` — [`season_page`](src/app.py)
-- `/season/<season>/data` — [`season_data_page`](src/app.py)
-- `/season/<season>/team` (GET, POST) — [`team_assemble_page`](src/app.py)
-- `/season/<season>/compare` (GET, POST) — [`compare_teams`](src/app.py)
-- `/season/<season>/board` — board UI rendered by [`board_page`](src/app.py)
-- `/season/<season>/board/recommend` (POST) — recommendation API [`board_recommend`](src/app.py)
-- `/players/<season>` — returns canonical player names for a season [`load_all_player_names`](src/app.py)
-- `/autocomplete/<season>` — autocomplete endpoint [`autocomplete`](src/app.py)
-- `/auth`, `/register`, `/login`, `/logout` — auth endpoints (`register`, `login`, `logout` in [src/app.py](src/app.py))
-- `/teams` — list saved teams for current user [`list_teams`](src/app.py)
+### Added / Improved
 
-## Project structure
-```
-README.md
-requirements.txt
-src/
-  app.py
-  BasicParser.py
-  Nopunts/        # expected location for .xls/.xlsx datasets (nopunt scoring)
-  Tovpunts/       # expected location for .xls/.xlsx datasets (tovpunt scoring)
-  static/
-    css/
-      courtcraft.css
-    img/
-  templates/
-    base.html
-    home.html
-    season.html
-    team_assemble.html
-    compare_teams.html
-    board.html
-    teams.html
-    auth.html
-```
+- Per-user League Teams isolation:
+  - Guests see an empty League Teams page
+  - Logged-in users only see their own league teams
+  - Board "taken players" now only includes the logged-in user's league teams
+- Assemble Team integration into League Power Rankings:
+  - Latest saved Assemble Team roster is included as a special "My Team" row in power rankings
+- Performance:
+  - Rankings dataframes are cached in-memory by file mtime to reduce repeated Excel parsing
+- UI/UX:
+  - Bright basketball theme and colorful action tiles
+  - Compact season action cards
+- Player photos:
+  - Automatic best-effort headshot URL generation
+  - Falls back to generated avatars when a headshot is unavailable
 
-## Quickstart (local dev)
-1. Create and activate a virtualenv
+### Removed
+
+- Waiver Wire feature removed (route + UI)
+- Stats Leaders feature removed from season flow
+  - Old `/season/<season>/data` now redirects back to season page with an info flash
+
+## Stack
+
+- Python 3.12+
+- Flask
+- pandas
+- SQLite
+- Bootstrap + Jinja templates
+
+## Project Structure
+
+- `src/app.py` - main Flask app and business logic
+- `src/templates/` - Jinja templates
+- `src/static/css/courtcraft.css` - app styling
+- `src/sync_bbm_rankings.py` - BBM sync script
+- `src/Nopunts/` - nopunt ranking files
+- `src/Tovpunts/` - tovpunt ranking files
+- `src/users.db` - SQLite database (created/updated automatically)
+
+## Setup
+
+1. Create virtual environment
+
 ```bash
 python -m venv .venv
-# mac/linux
-source .venv/bin/activate
-# windows
-.venv\Scripts\activate
 ```
 
-2. Install deps
+2. Activate environment
+
+Windows PowerShell:
+
+```bash
+.venv\Scripts\Activate.ps1
+```
+
+3. Install dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Run the app
-```bash
-# Option A (recommended for dev)
-python src/app.py
+4. Run app
 
-# Option B (Flask CLI)
-# from project root:
-flask --app src/app.py --debug run
+```bash
+python src/app.py
 ```
 
-## Configuration & data
-- SQLite DB: `src/users.db` created automatically by [`init_db`](src/app.py).
-- Excel datasets: filenames and locations are configured in `data_dirs` / `data_files` inside [src/app.py](src/app.py). Example folders: `src/Nopunts/` and `src/Tovpunts/`. The code reads XLS/XLSX via `_read_excel_safe` in [src/app.py](src/app.py).
-- Allowed upload extensions: `.xls`, `.xlsx`. The safe reader picks engines (xlrd for .xls, openpyxl for .xlsx).
+App runs at:
 
-## Data ingestion / expected columns
-- Rankings spreadsheets should include a `Name` column. App expects value columns like `pV`, `rV`, `aV`, `sV`, `bV`, `toV`, `fg%V`, `ft%V`, `3V` in the datasets used for scoring and recommendations.
-- If you supply a custom Excel when assembling a team, it will be read temporarily and used for calculations.
+- `http://127.0.0.1:5000`
 
-## Live BBM sync (auto-download)
-You can sync the latest Basketball Monster rankings without manually exporting from the browser.
+## Data Files
 
-1. Run the sync command:
+Configured in `src/app.py` via `data_files` and `data_dirs`.
+The app supports `.xls` and `.xlsx`, with safe reader fallback logic.
+
+## Basketball Monster Sync
+
+Sync latest rankings into runtime file:
+
 ```bash
 python src/sync_bbm_rankings.py --season 25-26
 ```
 
-The sync script triggers Basketball Monster's `All Players` filter automatically (not `Only Top Players`) and validates that the dataset is large enough before saving.
+Behavior:
 
-It now writes two files:
-- `BBM_PlayerRankings<YY><YY>_nopunt.xlsx` (main export)
-- `BBM_PlayerRankings<YY><YY>_nopunt_runtime.xlsx` (app runtime copy to avoid file-lock issues when the main file is open in Excel)
+- Forces "All Players" mode
+- Validates expected row volume
+- Writes both:
+  - main export file
+  - runtime copy (used by app to avoid Excel lock issues)
 
-2. This downloads from:
-`https://basketballmonster.com/playerrankings.aspx`
+## Auth + Data Ownership
 
-3. And writes:
-`src/Nopunts/BBM_PlayerRankings2526_nopunt.xlsx`
+- Teams in `teams` are always per-user
+- League teams in `league_teams` are now per-user
+- If not logged in:
+  - League Teams view is intentionally empty
+  - League team management is disabled
 
-The app is configured to use this file for season `25-26`.
+## Notes
 
-### Keep it updated automatically (Windows Task Scheduler)
-Schedule a daily task that runs:
-```bash
-<path-to-python> <project-root>\src\sync_bbm_rankings.py --season 25-26
-```
-This keeps your local rankings file refreshed automatically.
-
-## Key implementation notes
-- Player name union loader: [`load_all_player_names`](src/app.py) merges names from both nopunts/tovpunt datasets for validation/autocomplete.
-- Safe Excel reader: `_read_excel_safe` in [src/app.py](src/app.py) returns None on missing files or reader errors and selects engines by extension.
-- Recommendation logic: [`board_recommend`](src/app.py) loads the best available dataset, builds candidate scores using weighted value columns, respects 8-cat scoring (ignores turnovers) and user punts.
-- DB helpers: [`get_db`](src/app.py), [`init_db`](src/app.py), and [`load_latest_team`](src/app.py) manage user/team persistence.
-
-## Troubleshooting
-- If pages complain about reading datasets, ensure `xlrd` (for .xls) and `openpyxl` (for .xlsx) are installed in your environment.
-- Ensure the expected Excel files are present under `src/Nopunts/` and `src/Tovpunts/` (filenames are defined in `data_files` in [src/app.py](src/app.py)).
-- Console / server logs will show exceptions for failed reads; the UI surfaces friendly flash messages.
-
-## Development tips
-- UI templates are in `src/templates/`. The board UI is [src/templates/board.html](src/templates/board.html) and uses a small client-side localStorage state for taken players and a POST to `/season/<season>/board/recommend` to get suggestions.
-- For a quick test of the parser, see [src/BasicParser.py](src/BasicParser.py).
-
-## License & notes
-- Do not commit real secrets. Replace `app.secret_key` in [src/app.py](src/app.py) with a secure value for production or use a `.env`.
-- For production, serve via a WSGI server (gunicorn, uWSGI) behind a reverse proxy and use a proper DB.
-
-Happy hacking!
-{ changed code }
-// ...existing code...
+- This is a dev server (`debug=True`) and not meant for production deployment as-is.
+- Replace `app.secret_key` in `src/app.py` before production use.

@@ -54,12 +54,14 @@ def init_db():
     db.execute("""
         CREATE TABLE IF NOT EXISTS league_teams (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
             season TEXT NOT NULL,
             team_name TEXT NOT NULL,
             players TEXT NOT NULL,
             ir_players TEXT NOT NULL,
             data_type TEXT NOT NULL,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id)
         );
     """)
 
@@ -67,6 +69,10 @@ def init_db():
     cols = [r[1] for r in db.execute("PRAGMA table_info(teams)").fetchall()]
     if "ir_players" not in cols:
         db.execute("ALTER TABLE teams ADD COLUMN ir_players TEXT NOT NULL DEFAULT '[]'")
+
+    league_cols = [r[1] for r in db.execute("PRAGMA table_info(league_teams)").fetchall()]
+    if "user_id" not in league_cols:
+        db.execute("ALTER TABLE league_teams ADD COLUMN user_id INTEGER")
 
     db.commit()
     db.close()
@@ -717,9 +723,14 @@ def _compute_league_power_rankings(season: str, rows):
         t["power_rank"] = idx
     return teams
 
-def _load_league_taken_players(season: str):
+def _load_league_taken_players(season: str, user_id=None):
+    if not user_id:
+        return []
     db = get_db()
-    rows = db.execute("SELECT players, ir_players FROM league_teams WHERE season=?", (season,)).fetchall()
+    rows = db.execute(
+        "SELECT players, ir_players FROM league_teams WHERE season=? AND (user_id=? OR user_id IS NULL)",
+        (season, user_id),
+    ).fetchall()
     names = []
     seen = set()
     for r in rows:
@@ -739,6 +750,7 @@ def _load_league_taken_players(season: str):
 @app.route("/season/<season>/league-teams", methods=["GET", "POST"])
 def league_teams_page(season):
     formatted = season.replace("-", "/")
+    user_id = session.get("user_id")
     form_data_type = request.form.get("data_type", "nopunts") if request.method == "POST" else "nopunts"
     form_team_name = (request.form.get("team_name") or "").strip() if request.method == "POST" else ""
     form_players = [request.form.get(f"player{i}", "").strip() for i in range(1, 14)] if request.method == "POST" else [""] * 13
@@ -746,13 +758,20 @@ def league_teams_page(season):
     edit_team_id = (request.form.get("edit_team_id") or "").strip() if request.method == "POST" else (request.args.get("edit") or "").strip()
 
     if request.method == "POST":
+        if not user_id:
+            flash("Please log in to manage League Teams.", "warning")
+            return redirect(url_for("auth"))
+
         action = request.form.get("action", "save")
         db = get_db()
 
         if action == "delete":
             team_id = request.form.get("team_id", "").strip()
             if team_id.isdigit():
-                db.execute("DELETE FROM league_teams WHERE id=? AND season=?", (int(team_id), season))
+                db.execute(
+                    "DELETE FROM league_teams WHERE id=? AND season=? AND (user_id=? OR user_id IS NULL)",
+                    (int(team_id), season, user_id),
+                )
                 db.commit()
                 flash("League team removed.", "success")
             else:
@@ -771,8 +790,9 @@ def league_teams_page(season):
             normalized_type = "tovpunt" if "tov" in form_data_type else "nopunts"
             if edit_team_id.isdigit():
                 db.execute(
-                    "UPDATE league_teams SET team_name=?, players=?, ir_players=?, data_type=?, created_at=? WHERE id=? AND season=?",
+                    "UPDATE league_teams SET user_id=?, team_name=?, players=?, ir_players=?, data_type=?, created_at=? WHERE id=? AND season=? AND (user_id=? OR user_id IS NULL)",
                     (
+                        user_id,
                         team_name,
                         json.dumps(players),
                         json.dumps(ir_players),
@@ -780,14 +800,19 @@ def league_teams_page(season):
                         datetime.now().isoformat(),
                         int(edit_team_id),
                         season,
+                        user_id,
                     ),
                 )
                 flash(f"Updated league team: {team_name}", "success")
             else:
-                db.execute("DELETE FROM league_teams WHERE season=? AND lower(team_name)=lower(?)", (season, team_name))
                 db.execute(
-                    "INSERT INTO league_teams(season, team_name, players, ir_players, data_type, created_at) VALUES(?,?,?,?,?,?)",
+                    "DELETE FROM league_teams WHERE season=? AND (user_id=? OR user_id IS NULL) AND lower(team_name)=lower(?)",
+                    (season, user_id, team_name),
+                )
+                db.execute(
+                    "INSERT INTO league_teams(user_id, season, team_name, players, ir_players, data_type, created_at) VALUES(?,?,?,?,?,?,?)",
                     (
+                        user_id,
                         season,
                         team_name,
                         json.dumps(players),
@@ -801,38 +826,43 @@ def league_teams_page(season):
             return redirect(url_for("league_teams_page", season=season))
 
     if request.method == "GET" and edit_team_id.isdigit():
-        db = get_db()
-        row = db.execute(
-            "SELECT id, team_name, players, ir_players, data_type FROM league_teams WHERE id=? AND season=?",
-            (int(edit_team_id), season),
-        ).fetchone()
-        if row:
-            form_team_name = row["team_name"]
-            form_data_type = row["data_type"] if row["data_type"] in ("nopunts", "tovpunt") else "nopunts"
-            try:
-                p = json.loads(row["players"]) or []
-            except Exception:
-                p = []
-            try:
-                ir = json.loads(row["ir_players"]) or []
-            except Exception:
-                ir = []
-            form_players = [p[i] if i < len(p) else "" for i in range(13)]
-            form_ir_players = [ir[0] if len(ir) > 0 else "", ir[1] if len(ir) > 1 else ""]
-        else:
+        if not user_id:
             edit_team_id = ""
+        else:
+            db = get_db()
+            row = db.execute(
+                "SELECT id, team_name, players, ir_players, data_type FROM league_teams WHERE id=? AND season=? AND (user_id=? OR user_id IS NULL)",
+                (int(edit_team_id), season, user_id),
+            ).fetchone()
+            if row:
+                form_team_name = row["team_name"]
+                form_data_type = row["data_type"] if row["data_type"] in ("nopunts", "tovpunt") else "nopunts"
+                try:
+                    p = json.loads(row["players"]) or []
+                except Exception:
+                    p = []
+                try:
+                    ir = json.loads(row["ir_players"]) or []
+                except Exception:
+                    ir = []
+                form_players = [p[i] if i < len(p) else "" for i in range(13)]
+                form_ir_players = [ir[0] if len(ir) > 0 else "", ir[1] if len(ir) > 1 else ""]
+            else:
+                edit_team_id = ""
 
-    db = get_db()
-    rows = list(db.execute(
-        "SELECT id, team_name, players, ir_players, data_type, created_at FROM league_teams WHERE season=? ORDER BY created_at DESC",
-        (season,),
-    ).fetchall())
+    rows = []
+    if user_id:
+        db = get_db()
+        rows = list(db.execute(
+            "SELECT id, team_name, players, ir_players, data_type, created_at FROM league_teams WHERE season=? AND (user_id=? OR user_id IS NULL) ORDER BY created_at DESC",
+            (season, user_id),
+        ).fetchall())
 
     # Also include the logged-in user's latest Assemble Team roster in rankings.
-    if session.get("user_id"):
+    if user_id:
         my_row = db.execute(
             "SELECT players, ir_players, data_type, created_at FROM teams WHERE user_id=? AND season=? ORDER BY datetime(created_at) DESC LIMIT 1",
-            (session["user_id"], season),
+            (user_id, season),
         ).fetchone()
         if my_row:
             rows.append({
@@ -851,6 +881,7 @@ def league_teams_page(season):
         "league_teams.html",
         season=formatted,
         season_url=season,
+        can_manage=bool(user_id),
         data_type=form_data_type,
         form_team_name=form_team_name,
         form_players=form_players,
@@ -1072,9 +1103,10 @@ def board_recommend(season):
 def board_page(season):
     try:
         team_players = []; team_data_type = "nopunts"
-        if session.get("user_id"):
-            team_players, team_data_type = load_latest_team(session["user_id"], season)
-        league_taken_players = _load_league_taken_players(season)
+        user_id = session.get("user_id")
+        if user_id:
+            team_players, team_data_type = load_latest_team(user_id, season)
+        league_taken_players = _load_league_taken_players(season, user_id=user_id)
         return render_template(
             "board.html",
             season=season,

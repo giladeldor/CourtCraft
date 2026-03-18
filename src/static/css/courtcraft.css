@@ -326,6 +326,23 @@ main.container {
 .action-color-7 { background: linear-gradient(135deg, #d9f0ff, #bbddff); }
 .action-color-8 { background: linear-gradient(135deg, #ffe7ab, #ffc978); }
 
+.player-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  min-width: 0;
+}
+
+.player-mini-photo {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(32, 45, 70, 0.25);
+  background: #f3ead8;
+  flex: 0 0 auto;
+}
+
 .brand-logo {
   height: 34px;
   width: auto;

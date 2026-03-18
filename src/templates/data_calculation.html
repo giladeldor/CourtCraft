@@ -4,25 +4,42 @@
 {% block content %}
   <h1>Stats Leaders: {{ season }}</h1>
 
+  {% if not results %}
+    <div class="alert alert-warning">No stats leaders available for this season data.</div>
+  {% endif %}
+
   {% for category, data in results.items() %}
     <h3 class="mt-4">{{ category }}</h3>
-    <table class="table table-striped">
-      <thead>
-        <tr>
-          {% for key in data[0].keys() %}
-            <th>{{ key }}</th>
-          {% endfor %}
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in data %}
+    {% if not data %}
+      <div class="text-muted small mb-3">No rows available.</div>
+    {% else %}
+      <table class="table table-striped align-middle">
+        <thead>
           <tr>
-            {% for v in row.values() %}
-              <td>{{ v }}</td>
+            {% for key in data[0].keys() %}
+              <th>{{ key }}</th>
             {% endfor %}
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {% for row in data %}
+            <tr>
+              {% for k, v in row.items() %}
+                {% if k == 'Player' %}
+                  <td>
+                    <span class="player-inline">
+                      <img src="{{ player_headshot_url(v) }}" alt="{{ v }}" class="player-mini-photo" loading="lazy">
+                      <span>{{ v }}</span>
+                    </span>
+                  </td>
+                {% else %}
+                  <td>{{ v }}</td>
+                {% endif %}
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
   {% endfor %}
 {% endblock %}

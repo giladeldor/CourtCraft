@@ -99,7 +99,12 @@
         <tbody>
           {% for r in results %}
             <tr>
-              <td class="text-truncate" title="{{ r.get('Name','') }}">{{ r.get('Name','')|safe }}</td>
+              <td class="text-truncate" title="{{ r.get('Name','') }}">
+                <span class="player-inline">
+                  <img src="{{ player_headshot_url(r.get('plain_name', r.get('Name',''))) }}" alt="{{ r.get('plain_name', r.get('Name','')) }}" class="player-mini-photo" loading="lazy">
+                  <span>{{ r.get('Name','')|safe }}</span>
+                </span>
+              </td>
               <td {{ r.get('pV_style','')|safe }}>{{ r.get('pV','') }}</td>
               <td {{ r.get('rV_style','')|safe }}>{{ r.get('rV','') }}</td>
               <td {{ r.get('aV_style','')|safe }}>{{ r.get('aV','') }}</td>
@@ -140,7 +145,7 @@
         <thead>
           <tr>
             {% for k,v in ir_rows[0].items() %}
-              {% if not k.endswith('_style') %}
+              {% if not k.endswith('_style') and k != 'plain_name' %}
                 <th>{{ k }}</th>
               {% endif %}
             {% endfor %}
@@ -150,8 +155,17 @@
           {% for row in ir_rows %}
             <tr class="table-warning">
               {% for k,v in row.items() %}
-                {% if not k.endswith('_style') %}
-                  <td>{{ v|safe }}</td>
+                {% if not k.endswith('_style') and k != 'plain_name' %}
+                  {% if k == 'Name' %}
+                    <td>
+                      <span class="player-inline">
+                        <img src="{{ player_headshot_url(row.get('plain_name', row.get('Name',''))) }}" alt="{{ row.get('plain_name', row.get('Name','')) }}" class="player-mini-photo" loading="lazy">
+                        <span>{{ v|safe }}</span>
+                      </span>
+                    </td>
+                  {% else %}
+                    <td>{{ v|safe }}</td>
+                  {% endif %}
                 {% endif %}
               {% endfor %}
             </tr>

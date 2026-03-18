@@ -3,6 +3,8 @@ import itertools
 import sqlite3
 import json
 import re
+import urllib.parse
+import urllib.request
 import pandas as pd
 import traceback
 from flask import (
@@ -76,7 +78,11 @@ init_db()
 # -----------------------------------------------------------------------------
 @app.context_processor
 def inject_globals():
-    return {'current_year': datetime.now().year, 'logged_in_user': session.get("user")}
+    return {
+        'current_year': datetime.now().year,
+        'logged_in_user': session.get("user"),
+        'player_headshot_url': player_headshot_url,
+    }
 
 # -----------------------------------------------------------------------------
 # Data files
@@ -108,6 +114,52 @@ season_data = {
     "21-22": {"title": "2021/22 NBA Season"},
     "20-21": {"title": "2020/21 NBA Season"}
 }
+
+PLAYER_HEADSHOT_CACHE = {}
+
+def _strip_player_name(name: str) -> str:
+    cleaned = re.sub(r"<[^>]*>", "", str(name or ""))
+    cleaned = re.sub(r"\(\d+g\)", "", cleaned, flags=re.IGNORECASE)
+    cleaned = cleaned.replace("+", " ")
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
+
+def player_headshot_url(name: str) -> str:
+    """Best-effort player headshot URL without needing local image files."""
+    clean_name = _strip_player_name(name)
+    if not clean_name:
+        return ""
+
+    key = clean_name.lower()
+    if key in PLAYER_HEADSHOT_CACHE:
+        return PLAYER_HEADSHOT_CACHE[key]
+
+    fallback = (
+        "https://ui-avatars.com/api/?name="
+        + urllib.parse.quote(clean_name)
+        + "&background=f5b448&color=1f2a44&rounded=true&size=64"
+    )
+
+    try:
+        api = "https://www.balldontlie.io/api/v1/players?search=" + urllib.parse.quote(clean_name)
+        with urllib.request.urlopen(api, timeout=2.5) as resp:
+            payload = json.loads(resp.read().decode("utf-8", "ignore"))
+        players = payload.get("data") or []
+        if players:
+            exact = next(
+                (p for p in players if (p.get("first_name", "") + " " + p.get("last_name", "")).strip().lower() == key),
+                players[0]
+            )
+            pid = exact.get("id")
+            if pid:
+                url = f"https://cdn.nba.com/headshots/nba/latest/260x190/{pid}.png"
+                PLAYER_HEADSHOT_CACHE[key] = url
+                return url
+    except Exception:
+        pass
+
+    PLAYER_HEADSHOT_CACHE[key] = fallback
+    return fallback
 
 # -----------------------------------------------------------------------------
 # SAFE EXCEL READER (handles .xls/.xlsx and engine selection)
@@ -182,6 +234,41 @@ def _normalize_rankings_df(df: pd.DataFrame) -> pd.DataFrame:
 
     return out
 
+def _build_stats_leaders(df: pd.DataFrame, limit: int = 15):
+    categories = [
+        ("Points Leaders", "p/g"),
+        ("Rebounds Leaders", "r/g"),
+        ("Assists Leaders", "a/g"),
+        ("Steals Leaders", "s/g"),
+        ("Blocks Leaders", "b/g"),
+        ("Threes Leaders", "3/g"),
+        ("FG% Leaders", "fg%"),
+        ("FT% Leaders", "ft%"),
+        ("Overall Value Leaders", "Value"),
+    ]
+
+    out = {}
+    for title, col in categories:
+        if col not in df.columns:
+            continue
+        keep = [c for c in ["Name", "Team", "Pos", col] if c in df.columns]
+        if "Name" not in keep:
+            continue
+        tmp = df[keep].copy()
+        tmp[col] = pd.to_numeric(tmp[col], errors="coerce")
+        tmp = tmp.dropna(subset=[col]).sort_values(col, ascending=False).head(limit)
+
+        rows = []
+        for _, r in tmp.iterrows():
+            rows.append({
+                "Player": str(r.get("Name", "")).strip(),
+                "Team": str(r.get("Team", "")).strip() if "Team" in tmp.columns else "",
+                "Pos": str(r.get("Pos", "")).strip() if "Pos" in tmp.columns else "",
+                "Value": round(float(r.get(col, 0.0)), 2),
+            })
+        out[title] = rows
+    return out
+
 # ----- Player name loader (union of nopunts/tovpunt) -----
 def load_all_player_names(season: str):
     names = set()
@@ -237,12 +324,12 @@ def sync_bbm_for_season(season):
 
 @app.route("/season/<season>/data")
 def season_data_page(season):
-    fp = os.path.join(os.path.dirname(__file__), data_dirs["nopunts"], data_files[season]["nopunts"])
-    df = _read_excel_safe(fp)
+    df, _ = _load_df_for_recs(season, "nopunts")
     if df is None:
         flash("Could not read default dataset. Please ensure xlrd/openpyxl are installed (see README).", "danger")
         return render_template("data_calculation.html", season=season.replace("-", "/"), results={})
-    return render_template("data_calculation.html", season=season.replace("-", "/"), results={})
+    leaders = _build_stats_leaders(df, limit=15)
+    return render_template("data_calculation.html", season=season.replace("-", "/"), results=leaders)
 
 # -----------------------------------------------------------------------------
 # Assemble Team
@@ -334,6 +421,7 @@ def team_assemble_page(season):
         df_ir = df[df['Name'].str.lower().isin(ir_clean)] if ir_clean else df.iloc[0:0]
         ir_rows = df_ir.to_dict(orient='records') if not df_ir.empty else []
         for r in ir_rows:
+            r["plain_name"] = str(r.get("Name", "")).strip()
             r["Name"] = str(r.get("Name", "")) + Markup(" <span style='color:#946200;font-weight:bold;'>(IR)</span>")
 
         df_f = df[df['Name'].str.lower().isin(clean)]
@@ -343,6 +431,7 @@ def team_assemble_page(season):
 
         exclude = ["Round","Rank","Value","Team","Inj","Pos","m/g","USG","fga/g", "fta/g","LeagV", "puntV", "g", "p/g","r/g","a/g","s/g","b/g","to/g","3/g","fg%","ft%"]
         for r in results:
+            r["plain_name"] = str(r.get("Name", "")).strip()
             games = pd.to_numeric(r.get("g", 0), errors="coerce")
             if pd.notna(games) and games < 40:
                 r["Name"] += Markup(" <span style='color:red;font-weight:bold;'>+</span>")
@@ -753,73 +842,6 @@ def league_teams_page(season):
         power_rankings=power_rankings,
     )
 
-def _build_waiver_recommendations(df, roster, free_agents, scoring_mode, scoring_type, punt_labels, limit=12):
-    punt_valcols = {CAT_LABEL_TO_VALCOL.get(lbl) for lbl in (punt_labels or [])}
-    roster_l = {n.lower() for n in roster}
-    fa_l = {n.lower() for n in free_agents}
-
-    # Candidate pool is restricted to the provided free agents list.
-    cand = df[df["Name"].str.lower().isin(fa_l)].copy()
-    cand = cand[~cand["Name"].str.lower().isin(roster_l)]
-    if cand.empty:
-        return [], [], {}
-
-    cols = [c for c in VAL_COLS if c in cand.columns]
-    if not cols:
-        return [], [], {}
-
-    effective_cols = [c for c in cols if not (scoring_type == "8cat" and c == "toV")]
-    totals = _current_totals(df, roster)
-    weak_cols = sorted(
-        [c for c in effective_cols if c not in punt_valcols],
-        key=lambda c: totals.get(c, 0.0)
-    )
-    weak_focus = weak_cols[:3]
-
-    weights = {c: (0.0 if c in punt_valcols else 1.0) for c in effective_cols}
-    for c in weak_focus:
-        if scoring_mode == "short_term":
-            weights[c] = weights.get(c, 0.0) + 1.25
-        else:
-            weights[c] = weights.get(c, 0.0) + 0.65
-
-    # In short-term mode, push counting stats and slightly reduce percentage impact.
-    if scoring_mode == "short_term":
-        for c in ("fg%V", "ft%V"):
-            if c in weights and weights[c] > 0:
-                weights[c] *= 0.8
-
-    cand[effective_cols] = cand[effective_cols].fillna(0.0)
-    scored = []
-    for _, row in cand.iterrows():
-        score = 0.0
-        for c in effective_cols:
-            score += float(row[c]) * weights.get(c, 0.0)
-
-        top_stats = sorted(
-            [(c, float(row[c])) for c in effective_cols if weights.get(c, 0.0) > 0],
-            key=lambda x: x[1],
-            reverse=True
-        )[:3]
-
-        strengths = []
-        for c, v in top_stats:
-            label = next((lbl for lbl, vc in CAT_LABEL_TO_VALCOL.items() if vc == c), c)
-            strengths.append(f"{label}: {round(v, 2)}")
-
-        scored.append({
-            "name": row["Name"],
-            "fit_score": round(score, 3),
-            "strengths": strengths
-        })
-
-    scored.sort(key=lambda x: x["fit_score"], reverse=True)
-
-    col_to_label = {v: k for k, v in CAT_LABEL_TO_VALCOL.items()}
-    weak_labels = [col_to_label.get(c, c) for c in weak_focus]
-    totals_labels = {col_to_label.get(c, c): round(float(totals.get(c, 0.0)), 2) for c in effective_cols}
-    return scored[:limit], weak_labels, totals_labels
-
 def _totals_for_players(df, players, cols):
     if not players:
         return {c: 0.0 for c in cols}
@@ -965,72 +987,6 @@ def trade_analyzer_page(season):
         opp_result=opp_result,
         verdict=verdict,
         missing_names=sorted(set(missing_names), key=lambda s: s.lower())
-    )
-
-@app.route("/season/<season>/waiver", methods=["GET", "POST"])
-def waiver_wire_page(season):
-    formatted = season.replace("-", "/")
-    data_type = "nopunts"
-    scoring_mode = "rest_season"
-    scoring_type = "9cat"
-    free_agents_text = ""
-    punts = []
-    roster_players = []
-    recommendations = []
-    weak_categories = []
-    roster_totals = {}
-
-    if session.get("user_id"):
-        roster_players, data_type = load_latest_team(session["user_id"], season)
-
-    if request.method == "POST":
-        data_type = request.form.get("data_type", data_type or "nopunts")
-        scoring_mode = request.form.get("scoring_mode", "rest_season")
-        scoring_type = request.form.get("scoring_type", "9cat")
-        punts = request.form.getlist("punts")
-        free_agents_text = (request.form.get("free_agents") or "").strip()
-
-        roster_text = (request.form.get("roster_players") or "").strip()
-        if roster_text:
-            roster_players = [n.strip() for n in roster_text.splitlines() if n.strip()]
-
-        free_agents = [n.strip() for n in free_agents_text.splitlines() if n.strip()]
-        if not roster_players:
-            flash("Add your roster players first (one name per line).", "warning")
-        elif not free_agents:
-            flash("Add a free-agent pool (one name per line).", "warning")
-        else:
-            df, _ = _load_df_for_recs(season, data_type)
-            if df is None:
-                flash("Could not read rankings dataset for waiver recommendations.", "danger")
-            else:
-                recommendations, weak_categories, roster_totals = _build_waiver_recommendations(
-                    df=df,
-                    roster=roster_players,
-                    free_agents=free_agents,
-                    scoring_mode=scoring_mode,
-                    scoring_type=scoring_type,
-                    punt_labels=punts,
-                    limit=15 if scoring_mode == "rest_season" else 10
-                )
-                if scoring_type == "8cat":
-                    roster_totals.pop("TO", None)
-                if not recommendations:
-                    flash("No matching free agents found in the selected dataset.", "warning")
-
-    return render_template(
-        "waiver_wire.html",
-        season=formatted,
-        season_url=season,
-        roster_players=roster_players,
-        data_type=data_type,
-        scoring_mode=scoring_mode,
-        scoring_type=scoring_type,
-        punts=punts,
-        free_agents_text=free_agents_text,
-        recommendations=recommendations,
-        weak_categories=weak_categories,
-        roster_totals=roster_totals
     )
 
 @app.route("/season/<season>/board/recommend", methods=["POST"])

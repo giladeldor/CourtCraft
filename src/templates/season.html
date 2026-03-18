@@ -43,22 +43,15 @@
           <span class="season-action-title">League Teams</span>
           <span class="season-action-desc">Track league rosters and power rankings to map your competition.</span>
         </a>
-        <a
-          href="{{ url_for('waiver_wire_page', season=season_url) }}"
-          class="season-action-tile action-color-6"
-        >
-          <span class="season-action-title">Waiver Wire</span>
-          <span class="season-action-desc">Find free-agent pickups that best fit your team needs.</span>
-        </a>
         <form method="post" action="{{ url_for('sync_bbm_for_season', season=season_url) }}">
-          <button type="submit" class="season-action-tile action-color-7 w-100">
+          <button type="submit" class="season-action-tile action-color-6 w-100">
             <span class="season-action-title">Sync Latest BBM Data</span>
             <span class="season-action-desc">Refresh rankings from Basketball Monster with one click.</span>
           </button>
         </form>
         <a
           href="{{ url_for('board_page', season=season_url) }}"
-          class="season-action-tile action-color-8"
+          class="season-action-tile action-color-7"
         >
           <span class="season-action-title">Board</span>
           <span class="season-action-desc">Run your draft board, mark picks, and get live recommendations.</span>

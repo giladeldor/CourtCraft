@@ -405,19 +405,22 @@ def team_assemble_page(season):
         clean = [n.lower() for n in registered]
         ir_clean = {n.lower() for n in ir_players}
 
+        exclude = ["Round","Rank","Value","Team","Inj","Pos","m/g","USG","fga/g", "fta/g","LeagV", "puntV", "g", "p/g","r/g","a/g","s/g","b/g","to/g","3/g","fg%","ft%"]
+
         # IR players are tracked separately and excluded from active totals.
         df_ir = df[df['Name'].str.lower().isin(ir_clean)] if ir_clean else df.iloc[0:0]
         ir_rows = df_ir.to_dict(orient='records') if not df_ir.empty else []
         for r in ir_rows:
             r["plain_name"] = str(r.get("Name", "")).strip()
             r["Name"] = str(r.get("Name", "")) + Markup(" <span style='color:#946200;font-weight:bold;'>(IR)</span>")
+            for c in exclude:
+                r.pop(c, None)
 
         df_f = df[df['Name'].str.lower().isin(clean)]
         if ir_clean:
             df_f = df_f[~df_f['Name'].str.lower().isin(ir_clean)]
         results = df_f.to_dict(orient='records')
 
-        exclude = ["Round","Rank","Value","Team","Inj","Pos","m/g","USG","fga/g", "fta/g","LeagV", "puntV", "g", "p/g","r/g","a/g","s/g","b/g","to/g","3/g","fg%","ft%"]
         for r in results:
             r["plain_name"] = str(r.get("Name", "")).strip()
             games = pd.to_numeric(r.get("g", 0), errors="coerce")
@@ -438,6 +441,10 @@ def team_assemble_page(season):
         mins = {c: df_f[c].min() if c in df_f else 0 for c in val_cols}
         maxs = {c: df_f[c].max() if c in df_f else 0 for c in val_cols}
         for r in results:
+            for c in val_cols:
+                color = get_color(r.get(c,0), mins[c], maxs[c])
+                r[f"{c}_style"] = f'style=\"background-color:{color}\"'
+        for r in ir_rows:
             for c in val_cols:
                 color = get_color(r.get(c,0), mins[c], maxs[c])
                 r[f"{c}_style"] = f'style=\"background-color:{color}\"'
@@ -604,15 +611,26 @@ def autocomplete(season):
 # -----------------------------------------------------------------------------
 # Helper: latest team for a season
 # -----------------------------------------------------------------------------
-def load_latest_team(user_id: int, season: str):
+def load_latest_team(user_id: int, season: str, include_ir: bool = False):
     db = get_db()
     row = db.execute(
-        "SELECT players, data_type FROM teams WHERE user_id=? AND season=? ORDER BY datetime(created_at) DESC LIMIT 1",
+        "SELECT players, ir_players, data_type FROM teams WHERE user_id=? AND season=? ORDER BY datetime(created_at) DESC LIMIT 1",
         (user_id, season)
     ).fetchone()
     if not row: return [], "nopunts"
     try: players = json.loads(row["players"]) or []
     except Exception: players = []
+    try: ir_players = json.loads(row["ir_players"]) or []
+    except Exception: ir_players = []
+    if include_ir:
+        all_players = []
+        seen = set()
+        for name in (players + ir_players):
+            key = str(name).strip().lower()
+            if key and key not in seen:
+                seen.add(key)
+                all_players.append(str(name).strip())
+        players = all_players
     return players, row["data_type"]
 
 # -----------------------------------------------------------------------------
@@ -1105,7 +1123,7 @@ def board_page(season):
         team_players = []; team_data_type = "nopunts"
         user_id = session.get("user_id")
         if user_id:
-            team_players, team_data_type = load_latest_team(user_id, season)
+            team_players, team_data_type = load_latest_team(user_id, season, include_ir=True)
         league_taken_players = _load_league_taken_players(season, user_id=user_id)
         return render_template(
             "board.html",

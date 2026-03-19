@@ -219,17 +219,16 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!isLoggedIn) return;
     localStorage.setItem(storageKey('taken'), JSON.stringify(taken));
   }
-  function seedMyTeamOnce(){
-    try{
-      const seeded = JSON.parse(localStorage.getItem(storageKey('seededMyTeam'))) || false;
-      if (seeded) return;
-      for (const n of (teamPlayers||[])){
-        const lower = (n||'').trim().toLowerCase();
-        let canonical = nameMap.has(lower) ? nameMap.get(lower) : n;
-        if(lower && !takenKeys.has(lower)){ taken.push(canonical); takenKeys.add(lower); }
+  function mergeMyTeamIntoTaken(){
+    for (const n of (teamPlayers || [])) {
+      const lower = (n || '').trim().toLowerCase();
+      const canonical = nameMap.has(lower) ? nameMap.get(lower) : n;
+      if (lower && !takenKeys.has(lower)) {
+        taken.push(canonical);
+        takenKeys.add(lower);
       }
-      saveTaken(); localStorage.setItem(storageKey('seededMyTeam'), 'true');
-    }catch{}
+    }
+    saveTaken();
   }
 
   function mergeLeagueTeamsIntoTaken(){
@@ -347,7 +346,7 @@ document.addEventListener('DOMContentLoaded', function() {
   (async () => {
     await loadValidNames();
     loadTaken();
-    seedMyTeamOnce();
+    mergeMyTeamIntoTaken();
     mergeLeagueTeamsIntoTaken();
     renderTaken();
 
